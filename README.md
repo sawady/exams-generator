@@ -1,5 +1,7 @@
 # exams-generator
 
+[![Sponsor](https://img.shields.io/github/sponsors/sawady?label=Sponsor&logo=GitHub)](https://github.com/sponsors/sawady)
+
 An [MCP](https://modelcontextprotocol.io) server that helps teachers write
 programming exams with an AI assistant such as Claude Code. Every exam is
 saved with a reference solution that a real compiler has checked, and is
@@ -241,6 +243,11 @@ uv venv && uv pip install -e ".[dev]"
 
 CI runs the suite on Python 3.10, 3.12 and 3.13, once more with every toolchain installed, and
 builds and smoke-tests the Docker image.
+
+## Sponsoring
+
+exams-generator is free software. If it is useful to you, you can support its development through
+[GitHub Sponsors](https://github.com/sponsors/sawady).
 
 ## License
 
