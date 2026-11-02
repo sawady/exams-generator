@@ -1,0 +1,17 @@
+services:
+  exams-generator:
+    build: .
+    image: exams-generator:latest
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      # Bind to localhost and put a TLS reverse proxy in front for remote use.
+      - "127.0.0.1:${EXAMS_HTTP_PORT:-8765}:8765"
+    volumes:
+      # Your exams. Point this at a clone of your private exams repository.
+      - ${EXAMS_HOST_DIR:-./exams}:/exams
+      # Optional overrides: course.md, style/, templates/, pandoc-header.tex.
+      - ${EXAMS_HOST_DATA_DIR:-./data}:/data:ro
+      # Optional, for EXAMS_GIT_PUSH=true: an SSH deploy key for the exams repo.
+      # - ~/.ssh/exams_deploy_key:/home/exams/.ssh/id_ed25519:ro

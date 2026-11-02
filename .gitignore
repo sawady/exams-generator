@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+build/
+
+# Env
+.env
+.env.local
+
+# Compiler artifacts
+*.hi
+*.o
+*.dyn_hi
+*.dyn_o
+a.out
+
+# Local exam storage: real exams belong in a separate private repo.
+/exams/
+/data/exams/
+*.pdf
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/

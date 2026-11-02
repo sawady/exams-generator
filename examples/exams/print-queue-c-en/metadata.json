@@ -1,0 +1,23 @@
+{
+  "name": "print-queue-c-en",
+  "title": "Print queue",
+  "description": "Circular buffer ADT in C: client code, invariants, implementation.",
+  "tags": [
+    "example",
+    "adt",
+    "circular-buffer"
+  ],
+  "locale": "en",
+  "languages": [
+    "c"
+  ],
+  "solution_files": [
+    "client.c",
+    "print_queue.c",
+    "print_queue.h"
+  ],
+  "created_at": 0.0,
+  "updated_at": 0.0,
+  "rendered": [],
+  "last_check": null
+}

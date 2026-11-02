@@ -1,0 +1,22 @@
+{
+  "name": "toll-roads-haskell-es",
+  "title": "Rutas con peajes",
+  "description": "Recursión explícita, esquemas de recursión e inducción sobre un tipo algebraico.",
+  "tags": [
+    "example",
+    "recursion",
+    "recursion-schemes",
+    "induction"
+  ],
+  "locale": "es",
+  "languages": [
+    "haskell"
+  ],
+  "solution_files": [
+    "Exam.hs"
+  ],
+  "created_at": 0.0,
+  "updated_at": 0.0,
+  "rendered": [],
+  "last_check": null
+}

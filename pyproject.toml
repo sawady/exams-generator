@@ -1,0 +1,59 @@
+[project]
+name = "exams-generator"
+version = "0.1.0"
+description = "MCP server for writing programming exams whose solutions are checked by a real compiler and rendered to PDF"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Federico Sawady" }]
+requires-python = ">=3.10"
+keywords = ["mcp", "exams", "education", "haskell", "teaching", "claude"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Intended Audience :: Education",
+    "Topic :: Education",
+]
+dependencies = [
+    "mcp>=2.3,<3",
+    "starlette>=0.37",
+    "uvicorn>=0.30",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+# mypy lets the Python checker catch type errors, not only syntax errors.
+typecheck = ["mypy>=1.10"]
+dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.10"]
+
+[project.scripts]
+exams-generator = "exams_generator.server:main"
+
+# Third-party checkers register an entry point in their own package, e.g.
+#   [project.entry-points."exams_generator.checkers"]
+#   rust = "my_package.rust:RustChecker"
+
+[project.urls]
+Repository = "https://github.com/sawady/exams-generator"
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/exams_generator"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = [
+    "toolchain: needs an external compiler or renderer; skipped when it is missing",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["src", "tests"]
+extend-exclude = ["src/exams_generator/assets", "examples"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]

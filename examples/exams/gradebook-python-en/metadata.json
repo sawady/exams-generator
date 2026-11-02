@@ -1,0 +1,21 @@
+{
+  "name": "gradebook-python-en",
+  "title": "Gradebook",
+  "description": "Dictionaries, invariants and client code in typed Python.",
+  "tags": [
+    "example",
+    "dictionaries",
+    "invariants"
+  ],
+  "locale": "en",
+  "languages": [
+    "python"
+  ],
+  "solution_files": [
+    "solution.py"
+  ],
+  "created_at": 0.0,
+  "updated_at": 0.0,
+  "rendered": [],
+  "last_check": null
+}
