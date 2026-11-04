@@ -8,6 +8,10 @@ With ``lang`` set, pandoc loads babel (pdflatex) or polyglossia (xelatex) for th
 language, which gives correct hyphenation and localised names. If the LaTeX
 installation lacks the language files (e.g. ``texlive-lang-spanish`` on Debian), the
 PDF is rendered again without ``lang`` and the result carries a warning.
+
+A small Lua filter turns HTML ``<br>`` into real line breaks, so the two-column
+tables of the style guides (header next to the private struct, one line of code per
+``<br>``) keep their lines in the PDF; pandoc drops raw HTML when it writes LaTeX.
 """
 
 from __future__ import annotations
@@ -30,6 +34,15 @@ class PdfRenderResult:
     lang: str | None = None
     warning: str = ""
 
+
+# HTML <br> (raw inline HTML, which the LaTeX writer drops) becomes a line break.
+LINE_BREAK_FILTER = """
+function RawInline(el)
+  if el.format:match("html") and el.text:match("^<br%s*/?>$") then
+    return pandoc.LineBreak()
+  end
+end
+"""
 
 LANGUAGE_PACKAGES = {"es": "texlive-lang-spanish", "en": "texlive-latex-base"}
 
@@ -166,6 +179,9 @@ def _render(
             "-V",
             "colorlinks=true",
         ]
+        filter_path = Path(tmp) / "line-breaks.lua"
+        filter_path.write_text(LINE_BREAK_FILTER, encoding="utf-8")
+        args.extend(["--lua-filter", str(filter_path)])
         if lang:
             args.extend(["-V", f"lang={lang}"])
         if header_tex.strip():

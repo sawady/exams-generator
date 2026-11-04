@@ -93,3 +93,29 @@ def test_render_in_english(tmp_path):
     assert result.ok, result.log
     if _babel_has("english"):
         assert result.lang == "en" and not result.warning
+
+
+@pytest.mark.skipif(shutil.which("pandoc") is None, reason="pandoc not installed")
+def test_br_in_table_cells_becomes_line_break(tmp_path):
+    # The style guides put one line of code per <br> in two-column tables; without
+    # the filter pandoc drops the <br> and the lines run together in the PDF.
+    from exams_generator.pdf import LINE_BREAK_FILTER
+
+    filter_path = tmp_path / "line-breaks.lua"
+    filter_path.write_text(LINE_BREAK_FILTER, encoding="utf-8")
+    md = (
+        "| `a.h` | `a.c` |\n|---|---|\n"
+        "| `struct S;`<br>`typedef struct S* T;` | `int x;`<br/>`int y;` |\n"
+    )
+    latex = subprocess.run(
+        ["pandoc", "-f", "markdown", "-t", "latex", "--lua-filter", str(filter_path)],
+        input=md,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    flat = "".join(latex.split())
+    assert "<br" not in latex
+    # Without the filter both lines end up glued: \texttt{struct\ S;}\texttt{typedef...}
+    assert "S;}\\texttt{typedef" not in flat, latex
+    assert "x;}\\texttt{int" not in flat, latex

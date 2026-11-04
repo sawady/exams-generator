@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-04
+
+First public release.
+
 ### Added
 
 - MCP server (`exams-generator`, MCP Python SDK 2.x) over stdio and streamable HTTP
@@ -33,3 +37,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Test suite (pytest) and CI on GitHub Actions: Python 3.10/3.12/3.13, a job with every
   toolchain, and a Docker build with a smoke test.
 - `CONTRIBUTING.md`, MIT license.
+
+### Fixed
+
+- Line breaks (`<br>`) inside table cells, used by the C and C++ style guides to show a
+  header next to its private struct, are kept in the PDF (pandoc drops raw HTML when it
+  writes LaTeX; a small Lua filter turns them into line breaks).
+
+[Unreleased]: https://github.com/sawady/exams-generator/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/sawady/exams-generator/releases/tag/v0.1.0
