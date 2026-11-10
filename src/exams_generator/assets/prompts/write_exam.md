@@ -35,7 +35,9 @@ If the topic is unclear or missing, ask before writing anything.
    be defined.
 6. Pick a short `name` (`[A-Za-z0-9_-]`, e.g. `2026-midterm-library`) and call
    `save_exam` with the statement, the solution files, a title, tags and
-   `locale="{locale}"`. Check that the returned `check.ok` is true.
+   `locale="{locale}"`. Check that the returned `check.ok` is true. If the `run_demos`
+   tool exists, call it too and fix failures; it is off by default, so do not ask for
+   it. "skipped" means the demos have not been verified: say so in the report.
 7. Call `render_exam` with `variant="statement"` (and `variant="solution"` if the
    teacher wants an answer key). If rendering fails, fix the Markdown (usually a LaTeX
    special character or an unclosed code fence) and save again.

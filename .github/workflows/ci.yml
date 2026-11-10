@@ -41,16 +41,24 @@ jobs:
           sudo apt-get install -y --no-install-recommends ghc pandoc \
             texlive-latex-base texlive-latex-recommended texlive-fonts-recommended \
             texlive-lang-spanish lmodern ghostscript
+      - name: Install bubblewrap for the demo sandbox
+        run: |
+          sudo apt-get install -y --no-install-recommends bubblewrap
+          # Ubuntu 24.04 blocks unprivileged user namespaces by default.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - run: pip install -e ".[dev]"
       - name: Every checker must be available
         run: |
           python - <<'PY'
           from exams_generator.checkers import CheckerRegistry
           from exams_generator.pdf import toolchain_status
+          from exams_generator.sandbox import Sandbox
           rows = CheckerRegistry().describe()
           missing = [r["language"] for r in rows if not r["available"]]
           assert not missing, f"missing toolchains: {missing}"
           assert toolchain_status()["available"], "pandoc/pdflatex missing"
+          sandbox = Sandbox().status()
+          assert sandbox.available, f"sandbox missing: {sandbox.hint}"
           PY
       - name: Spanish PDFs use babel-spanish
         run: kpsewhich spanish.ldf

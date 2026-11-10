@@ -10,7 +10,7 @@ from starlette.testclient import TestClient
 
 from exams_generator.config import Settings
 from exams_generator.server import build_http_app, create_server
-from tests.conftest import requires, requires_pdf
+from tests.conftest import requires, requires_pdf, requires_sandbox
 
 pytestmark = pytest.mark.anyio
 
@@ -220,3 +220,63 @@ async def test_stdio_end_to_end(tmp_path):
         assert EXPECTED_TOOLS <= tools
         res = await call(client, "check_snippet", language="python", code="x: int = 1\n")
         assert res["ok"], res
+
+
+async def test_run_demos_is_off_by_default(settings):
+    async with Client(create_server(settings)) as client:
+        names = {t.name for t in (await client.list_tools()).tools}
+        assert "run_demos" not in names
+        info = await call(client, "list_languages")
+        assert info["demos"] == {"enabled": False}
+
+
+async def test_run_demos_appears_only_when_enabled(tmp_path):
+    settings = Settings(
+        data_dir=tmp_path / "data",
+        exams_dir=tmp_path / "exams",
+        run_demos=True,
+        bwrap=str(tmp_path / "no-bwrap"),
+    )
+    async with Client(create_server(settings)) as client:
+        names = {t.name for t in (await client.list_tools()).tools}
+        assert "run_demos" in names
+        info = await call(client, "list_languages")
+        assert info["demos"]["enabled"] is True
+        assert info["demos"]["available"] is False
+        code = '"""\n>>> 1\n1\n"""\n'
+        out = await call(client, "run_demos", extra_files={"solution.py": code})
+        assert out["ok"] is False
+        assert out["results"][0]["status"] == "skipped"
+
+
+async def test_run_demos_rejects_bad_filenames_and_unknown_exams(tmp_path):
+    settings = Settings(
+        data_dir=tmp_path / "data",
+        exams_dir=tmp_path / "exams",
+        run_demos=True,
+        bwrap=str(tmp_path / "no-bwrap"),
+    )
+    async with Client(create_server(settings)) as client:
+        out = await call(client, "run_demos", extra_files={"../evil.py": "x = 1\n"})
+        assert out["ok"] is False
+        assert "error" in out
+        out = await call(client, "run_demos", name="does-not-exist")
+        assert out["ok"] is False
+        assert "error" in out
+
+
+@requires_sandbox
+async def test_run_demos_end_to_end_on_a_saved_exam(tmp_path):
+    settings = Settings(
+        data_dir=tmp_path / "data",
+        exams_dir=tmp_path / "exams",
+        run_demos=True,
+        bwrap=Settings.from_env().bwrap,
+    )
+    code = '"""\n>>> add(1, 2)\n3\n"""\n\n\ndef add(a, b):\n    return a + b\n'
+    async with Client(create_server(settings)) as client:
+        await call(client, "save_exam", name="demo", statement="# Demo\n", solution={"s.py": code})
+        out = await call(client, "run_demos", name="demo")
+        assert out["ok"] is True, out["output"]
+        assert out["results"][0]["passed"] == 1
+        assert out["name"] == "demo"

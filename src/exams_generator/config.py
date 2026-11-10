@@ -22,6 +22,13 @@ EXAMS_GIT_PUSH             Also ``git push`` after each commit          ``false`
 EXAMS_LOCALE               Default exam language: ``en`` or ``es``      ``en``
 EXAMS_CHECK_TIMEOUT        Seconds before a compiler run is killed      ``60``
 EXAMS_PDF_ENGINE           pandoc ``--pdf-engine``                      ``pdflatex``
+EXAMS_RUN_DEMOS            Register the ``run_demos`` tool, which       ``false``
+                           executes solutions in a sandbox
+EXAMS_RUN_TIMEOUT          Seconds before a demo run is killed          ``30``
+EXAMS_RUN_MEMORY_MB        Address-space limit of a demo run            ``4096``
+EXAMS_RUN_RO_BINDS         Extra read-only directories in the sandbox   (none)
+                           (toolchains outside ``/usr``), ``:`` separated
+EXAMS_BWRAP                bubblewrap executable                        ``bwrap``
 =========================  ===========================================  ==================
 
 Checker-specific variables (``EXAMS_GHC``, ``EXAMS_CC``, ``EXAMS_CFLAGS``,
@@ -69,6 +76,11 @@ class Settings:
     allowed_hosts: tuple[str, ...] = field(default_factory=tuple)
     check_timeout: float = 60.0
     pdf_engine: str = "pdflatex"
+    run_demos: bool = False
+    run_timeout: float = 30.0
+    run_memory_mb: int = 4096
+    run_ro_binds: tuple[Path, ...] = field(default_factory=tuple)
+    bwrap: str = "bwrap"
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Settings:
@@ -77,6 +89,11 @@ class Settings:
         exams_dir_raw = env.get("EXAMS_DIR")
         exams_dir = Path(exams_dir_raw).expanduser() if exams_dir_raw else data_dir / "exams"
         hosts = tuple(h.strip() for h in env.get("EXAMS_ALLOWED_HOSTS", "").split(",") if h.strip())
+        ro_binds = tuple(
+            Path(p.strip()).expanduser()
+            for p in env.get("EXAMS_RUN_RO_BINDS", "").split(os.pathsep)
+            if p.strip()
+        )
         return cls(
             data_dir=data_dir,
             exams_dir=exams_dir,
@@ -90,4 +107,9 @@ class Settings:
             allowed_hosts=hosts,
             check_timeout=float(env.get("EXAMS_CHECK_TIMEOUT") or 60),
             pdf_engine=env.get("EXAMS_PDF_ENGINE") or "pdflatex",
+            run_demos=_bool(env.get("EXAMS_RUN_DEMOS"), False),
+            run_timeout=float(env.get("EXAMS_RUN_TIMEOUT") or 30),
+            run_memory_mb=int(env.get("EXAMS_RUN_MEMORY_MB") or 4096),
+            run_ro_binds=ro_binds,
+            bwrap=env.get("EXAMS_BWRAP") or "bwrap",
         )

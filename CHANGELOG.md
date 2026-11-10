@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Optional `run_demos` tool that executes a solution's demos in a sandbox: doctests
+  (Python), `>>>` demos checked against their expected output (Haskell) and a `main`
+  (C/C++). Off by default; set `EXAMS_RUN_DEMOS=true` to register it. It runs in
+  bubblewrap with no network and no access to the exams, under a timeout and resource
+  limits. A missing sandbox or toolchain, or a solution with no demos, is reported as
+  *skipped*, never as passed. The checkers still never execute anything.
+
 ## [0.1.0] - 2026-11-04
 
 First public release.

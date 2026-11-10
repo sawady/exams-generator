@@ -32,7 +32,8 @@ If the topic is unclear or missing, ask before writing anything.
 5. Write the statement (Markdown) following template and style guide: no solutions,
    achievable efficiencies, every variable in a bound defined.
 6. `save_exam` with a short `name`, the statement, the solution files, title, tags and
-   locale. Confirm `check.ok` is true.
+   locale. Confirm `check.ok` is true. If the `run_demos` tool exists, call it too and fix
+   failures; "skipped" means the demos have not been verified, so say so in the report.
 7. `render_exam` (`statement`, plus `solution` if an answer key is wanted). Fix the
    Markdown and save again if rendering fails.
 8. Report the exam name, a two-line summary per exercise, the check result, the PDF

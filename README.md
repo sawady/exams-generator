@@ -182,6 +182,65 @@ Other languages can be added from another package through an entry point:
 rust = "my_package.rust:RustChecker"   # a subclass of exams_generator.checkers.Checker
 ```
 
+## Running demos (optional)
+
+The checkers only compile. The optional `run_demos` tool goes further: it **executes**
+the solution's demos, which also catches a solution that compiles but gives the wrong
+answer. Because it runs code, it does not exist unless you turn it on:
+
+```bash
+sudo apt install bubblewrap         # 0.8 or newer also limits the size of its tmpfs
+export EXAMS_RUN_DEMOS=true
+export EXAMS_RUN_RO_BINDS="$HOME/.ghcup"   # only for toolchains outside /usr
+```
+
+| Language | What counts as a demo | How it passes |
+|---|---|---|
+| `python` | doctests in docstrings | every example matches |
+| `haskell` | `>>> expr` lines in comments, with the expected output below | GHCi's output matches, line by line |
+| `c`, `cpp` | a `main` in a solution file or in `extra_files` | it builds and exits with status 0 |
+
+Solutions in C and C++ usually have no `main`; pass the demo as another file:
+`run_demos(name="my-exam", extra_files={"demo_main.c": "..."})`. Nothing is saved.
+
+Status is one of `passed`, `failed`, `timeout` or `skipped`. A missing sandbox, a missing
+toolchain, a language without a runner and a solution without demos are all *skipped*,
+and `ok` is true only if every language really passed. Python `>>>` lines in comments are
+not doctests and do not run; only docstrings count, so check the counts in the report.
+
+**What the sandbox gives you.** Every run is a throwaway [bubblewrap](https://github.com/containers/bubblewrap)
+sandbox, for the build as well as the run (compilers can run code too: Template Haskell,
+for one):
+
+- new user, PID, network, IPC, UTS and cgroup namespaces, all capabilities dropped: no
+  network (only a private loopback) and no other process in sight;
+- the file system is `/usr`, `/bin`, `/lib*`, `/etc/ld.so.cache`, `/etc/alternatives` and
+  `EXAMS_RUN_RO_BINDS`, read-only, plus a private tmpfs for `/work`, `/tmp` and `/dev/shm`.
+  No home, no `EXAMS_DIR`, no other solution. Only the files of this run are copied in;
+- an empty environment (no token or credential of the server gets in);
+- a wall-clock limit (`EXAMS_RUN_TIMEOUT`, 30 s, for build and run together) that kills
+  the whole process tree, plus limits on address space (`EXAMS_RUN_MEMORY_MB`, 4096),
+  processes (128), file size (32 MiB) and open files (256).
+
+**What it does not give you.** It is meant for a teacher's own drafts, including ones an
+assistant wrote, not for hostile code from strangers:
+
+- it shares the host's kernel and has no seccomp filter, so a kernel bug can break out of it.
+  For untrusted input, use a VM;
+- memory is limited per process, by address space: there is no cgroup limit, and several
+  processes can use more in total. CPU is limited only by the timeout;
+- with bubblewrap older than 0.8 (for example on Ubuntu 22.04) the tmpfs cannot be limited,
+  so a run can take up to half of the RAM until the timeout;
+- it is Linux only and needs unprivileged user namespaces. Ubuntu 24.04 restricts them
+  through AppArmor (allow them with an AppArmor profile for `bwrap`, or with
+  `sysctl kernel.apparmor_restrict_unprivileged_userns=0`), and the stock Docker image has
+  no bubblewrap. In both cases the tool reports *skipped*; `list_languages` shows why,
+  under `demos`;
+- binding a directory with `EXAMS_RUN_RO_BINDS` exposes it to the code. The server refuses
+  binds that would expose the home directory or the exams, but check any other you add.
+
+On a shared HTTP server, anyone holding the Bearer token can run code through this tool.
+
 ## Reference
 
 **Tools**
@@ -197,6 +256,7 @@ rust = "my_package.rust:RustChecker"   # a subclass of exams_generator.checkers.
 | `render_exam` | Render `exam.pdf` (statement) or `solution.pdf` (answer key). |
 | `get_exam_pdf` | The PDF as base64, rendering it if needed. |
 | `preview_pdf` | Render any Markdown without saving. |
+| `run_demos` | Optional, off by default: execute demos in a sandbox (see above). |
 | `get_style_guide` / `get_template` / `get_course_profile` | Writing rules and starting points. |
 
 **Prompts**: `write_exam(topic, languages, locale, kind, exercises, notes)`,
@@ -230,6 +290,11 @@ rust = "my_package.rust:RustChecker"   # a subclass of exams_generator.checkers.
 | `EXAMS_LOCALE` | `en` | Default exam language (`en`, `es`) |
 | `EXAMS_CHECK_TIMEOUT` | `60` | Seconds per compiler run |
 | `EXAMS_PDF_ENGINE` | `pdflatex` | pandoc `--pdf-engine` |
+| `EXAMS_RUN_DEMOS` | `false` | Register the `run_demos` tool |
+| `EXAMS_RUN_TIMEOUT` | `30` | Seconds per demo run, build included |
+| `EXAMS_RUN_MEMORY_MB` | `4096` | Address-space limit of a demo run |
+| `EXAMS_RUN_RO_BINDS` | (none) | Extra read-only directories in the sandbox, `:` separated |
+| `EXAMS_BWRAP` | `bwrap` | bubblewrap executable |
 
 A `.env` file in the working directory is read too.
 

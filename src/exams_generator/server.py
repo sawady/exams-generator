@@ -20,7 +20,9 @@ from . import __version__
 from .checkers import CheckerRegistry, UnknownLanguageError
 from .config import LOCALE_NAMES, SUPPORTED_LOCALES, Settings
 from .content import Content
+from .demos import DemoRunner
 from .pdf import render_pdf, solution_markdown, toolchain_status
+from .sandbox import Sandbox
 from .storage import Storage, StorageError, check_summary, validate_filename, validate_name
 
 INSTRUCTIONS = """\
@@ -32,6 +34,12 @@ draft the solution and use check_snippet until it passes -> save_exam (statement
 solution files; it re-checks them) -> render_exam. Never save an exam whose check fails
 without telling the user. Exams live in a private directory: do not copy real exams
 into public places.
+"""
+
+RUN_DEMOS_INSTRUCTIONS = """\
+
+run_demos executes the solution's demos and doctests in a sandbox. Only status "passed"
+verified anything: "skipped" (no sandbox, no toolchain, no demos) is not a pass.
 """
 
 SOLUTION_HEADING = {"en": "Solution", "es": "Solución"}
@@ -48,10 +56,18 @@ def create_server(settings: Settings | None = None) -> MCPServer:
     content = Content(settings.data_dir, default_locale=settings.locale)
     registry = CheckerRegistry(timeout=settings.check_timeout)
 
+    sandbox = Sandbox(
+        bwrap=settings.bwrap,
+        timeout=settings.run_timeout,
+        memory_mb=settings.run_memory_mb,
+        ro_binds=settings.run_ro_binds,
+        protected=(settings.exams_dir, settings.data_dir),
+    )
+
     mcp = MCPServer(
         "exams-generator",
         title="Exams generator",
-        instructions=INSTRUCTIONS,
+        instructions=INSTRUCTIONS + (RUN_DEMOS_INSTRUCTIONS if settings.run_demos else ""),
         version=__version__,
     )
 
@@ -92,6 +108,11 @@ def create_server(settings: Settings | None = None) -> MCPServer:
             "exams_dir": str(settings.exams_dir),
             "git": storage.git_status(),
             "course_profile": content.course_profile() is not None,
+            "demos": (
+                {"enabled": True, **sandbox.status().as_dict()}
+                if settings.run_demos
+                else {"enabled": False}
+            ),
         }
 
     # ---------------------------------------------------------------- CRUD
@@ -224,6 +245,38 @@ def create_server(settings: Settings | None = None) -> MCPServer:
         check = run_checks(exam.solution)
         storage.record_check(name, check["ok"], check["results"])
         return {"name": name, **check}
+
+    # ---------------------------------------------------------------- demos
+
+    # Opt-in: without EXAMS_RUN_DEMOS this tool does not exist. It is the only way
+    # the server executes a solution; the checkers above never do.
+    if settings.run_demos:
+        runner = DemoRunner(registry, sandbox)
+
+        @mcp.tool()
+        def run_demos(name: str = "", extra_files: dict[str, str] | None = None) -> dict[str, Any]:
+            """Execute a solution's demos and doctests in a sandbox (no network, no access
+            to the exams, killed at a timeout).
+
+            - name: a saved exam, whose solution files are used. Optional.
+            - extra_files: {filename: content} added on top of them, or run on their own
+              if there is no name. Use it to supply a main() for C/C++ solutions.
+
+            Python runs doctests from docstrings, Haskell runs `>>> expr` comment lines
+            against the expected output below them, C/C++ build and run a main() (exit 0
+            passes). "ok" is true only if every language has status "passed"; "skipped"
+            (no sandbox, no toolchain, no demos) has not verified anything. Nothing is saved.
+            """
+            files: dict[str, str] = {}
+            try:
+                if name:
+                    files.update(storage.load_exam(name).solution)
+                for filename in extra_files or {}:
+                    validate_filename(filename)
+            except StorageError as err:
+                return {"ok": False, "error": str(err)}
+            files.update(extra_files or {})
+            return {"name": name, **runner.run_files(files)} if name else runner.run_files(files)
 
     # ----------------------------------------------------------- rendering
 

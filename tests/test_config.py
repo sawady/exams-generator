@@ -39,3 +39,21 @@ def test_normalize_locale():
     assert normalize_locale("ES") == "es"
     assert normalize_locale("fr", "en") == "en"
     assert normalize_locale(None, "es") == "es"
+
+
+def test_run_demos_is_opt_in(tmp_path):
+    assert Settings.from_env({}).run_demos is False
+    s = Settings.from_env(
+        {
+            "EXAMS_RUN_DEMOS": "true",
+            "EXAMS_RUN_TIMEOUT": "5",
+            "EXAMS_RUN_MEMORY_MB": "512",
+            "EXAMS_RUN_RO_BINDS": f"{tmp_path}/a:{tmp_path}/b",
+            "EXAMS_BWRAP": "/opt/bwrap",
+        }
+    )
+    assert s.run_demos is True
+    assert s.run_timeout == 5
+    assert s.run_memory_mb == 512
+    assert s.run_ro_binds == (tmp_path / "a", tmp_path / "b")
+    assert s.bwrap == "/opt/bwrap"
