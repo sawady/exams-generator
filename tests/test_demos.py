@@ -12,7 +12,7 @@ import exams_generator.checkers as checkers_package
 from exams_generator.checkers import CheckerRegistry
 from exams_generator.demos import DemoRunner, extract_haskell_demos
 from exams_generator.sandbox import Sandbox
-from tests.conftest import EXAMPLES, make_sandbox, requires, requires_sandbox
+from tests.conftest import EXAMPLES, make_sandbox, requires_demo, requires_sandbox
 
 PY_PASS = '"""\n>>> add(2, 3)\n5\n"""\n\n\ndef add(a, b):\n    return a + b\n'
 PY_FAIL = '"""\n>>> add(2, 3)\n6\n"""\n\n\ndef add(a, b):\n    return a + b\n'
@@ -70,7 +70,7 @@ def test_no_doctests_is_skipped_not_passed(runner):
 
 
 @requires_sandbox
-@requires("haskell")
+@requires_demo("haskell")
 def test_haskell_demo_result(tmp_path, runner):
     code = "double :: Int -> Int\ndouble x = x * 2\n\n{-\n>>> double 2\n4\n>>> double 3\n7\n-}\n"
     out = runner.run_files({"Exam.hs": code})
@@ -81,7 +81,7 @@ def test_haskell_demo_result(tmp_path, runner):
 
 
 @requires_sandbox
-@requires("haskell")
+@requires_demo("haskell")
 def test_haskell_runtime_error_fails_a_demo_with_no_expected_output(runner):
     code = 'boom :: Int\nboom = error "nope"\n\n{-\n>>> boom\n-}\n'
     out = runner.run_files({"Exam.hs": code})
@@ -90,7 +90,7 @@ def test_haskell_runtime_error_fails_a_demo_with_no_expected_output(runner):
 
 
 @requires_sandbox
-@requires("haskell")
+@requires_demo("haskell")
 def test_haskell_type_error_is_a_failure(runner):
     out = runner.run_files({"Exam.hs": 'x :: Int\nx = "no"\n\n{-\n>>> x\n1\n-}\n'})
     assert out["ok"] is False
@@ -108,7 +108,7 @@ def test_extract_haskell_demos():
 
 
 @requires_sandbox
-@requires("c")
+@requires_demo("c")
 def test_c_main_runs(runner):
     out = runner.run_files({"demo.c": C_MAIN})
     assert out["ok"] is True
@@ -116,7 +116,7 @@ def test_c_main_runs(runner):
 
 
 @requires_sandbox
-@requires("c")
+@requires_demo("c")
 def test_c_nonzero_exit_fails(runner):
     out = runner.run_files({"demo.c": "int main(void) { return 3; }\n"})
     assert out["ok"] is False
@@ -124,7 +124,7 @@ def test_c_nonzero_exit_fails(runner):
 
 
 @requires_sandbox
-@requires("c")
+@requires_demo("c")
 def test_c_compile_error_is_a_build_failure(runner):
     out = runner.run_files({"demo.c": "int main(void) { return x; }\n"})
     assert out["results"][0]["status"] == "failed"
@@ -132,7 +132,7 @@ def test_c_compile_error_is_a_build_failure(runner):
 
 
 @requires_sandbox
-@requires("c")
+@requires_demo("c")
 def test_c_without_main_is_skipped(runner):
     out = runner.run_files({"lib.c": "int f(void) { return 1; }\n"})
     assert out["ok"] is False
@@ -140,7 +140,7 @@ def test_c_without_main_is_skipped(runner):
 
 
 @requires_sandbox
-@requires("cpp")
+@requires_demo("cpp")
 def test_cpp_main_runs(runner):
     out = runner.run_files({"demo.cpp": "#include <vector>\nint main() { return 0; }\n"})
     assert out["ok"] is True
@@ -154,7 +154,7 @@ def test_example_python_exam_passes(runner):
 
 
 @requires_sandbox
-@requires("haskell")
+@requires_demo("haskell")
 def test_example_haskell_exam_passes(runner):
     directory = EXAMPLES / "toll-roads-haskell-es" / "solution"
     files = {p.name: p.read_text(encoding="utf-8") for p in directory.iterdir()}

@@ -20,8 +20,10 @@ uv venv && uv pip install -e ".[dev]"
 ```
 
 Install `ghc`, `gcc`/`g++`, `pandoc` and LaTeX (see the [README](README.md)) to run every
-test. CI runs the suite on several Python versions, once more with every toolchain, and
-builds the Docker image.
+test. The demo tests also need bubblewrap and a toolchain the sandbox can see: with GHC
+from GHCup, run them with `EXAMS_RUN_RO_BINDS="$HOME/.ghcup"`, or the Haskell ones skip.
+CI runs the suite on several Python versions, once more with every toolchain, and builds
+the Docker image.
 
 ## Style and rules
 

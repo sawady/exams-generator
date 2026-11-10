@@ -7,6 +7,7 @@ import pytest
 
 from exams_generator.checkers import CheckerRegistry
 from exams_generator.config import Settings
+from exams_generator.demos import DemoRunner
 from exams_generator.pdf import toolchain_status
 from exams_generator.sandbox import Sandbox
 
@@ -49,6 +50,29 @@ def make_sandbox(tmp_path: Path, timeout: float = 20.0, memory_mb: int = 4096) -
 requires_sandbox = pytest.mark.skipif(
     not make_sandbox(Path("/nonexistent")).status().available, reason="bubblewrap not usable here"
 )
+
+
+def demo_toolchain_problem(language: str) -> str | None:
+    """Why the demo runner could not use the toolchain for ``language``, or None.
+
+    Besides being installed, the toolchain has to be inside the sandbox: one installed
+    under the home directory (GHCup, for one) is invisible there until its directory is
+    added to EXAMS_RUN_RO_BINDS. This asks the runner itself, so the reason is the one a
+    demo run would report.
+    """
+    if not has_toolchain(language):
+        return f"{language} toolchain not installed"
+    runner = DemoRunner(_registry, make_sandbox(Path("/nonexistent")))
+    executable, why = runner._executable(_registry.get(language))
+    return None if executable else f"[{language}] {why}"
+
+
+def requires_demo(language: str) -> pytest.MarkDecorator:
+    """Skip a demo test when the sandbox cannot see the toolchain for ``language``."""
+    problem = demo_toolchain_problem(language)
+    return pytest.mark.skipif(problem is not None, reason=problem or "")
+
+
 requires_git = pytest.mark.skipif(shutil.which("git") is None, reason="git not installed")
 
 

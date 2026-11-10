@@ -59,6 +59,11 @@ jobs:
           assert toolchain_status()["available"], "pandoc/pdflatex missing"
           sandbox = Sandbox().status()
           assert sandbox.available, f"sandbox missing: {sandbox.hint}"
+          # The demo tests skip when the sandbox cannot see a toolchain: not here.
+          from tests.conftest import demo_toolchain_problem
+          problems = [demo_toolchain_problem(lang) for lang in ("python", "haskell", "c", "cpp")]
+          problems = [p for p in problems if p]
+          assert not problems, f"demo toolchains outside the sandbox: {problems}"
           PY
       - name: Spanish PDFs use babel-spanish
         run: kpsewhich spanish.ldf
