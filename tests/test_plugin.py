@@ -4,13 +4,17 @@ import json
 import re
 from pathlib import Path
 
+import exams_generator
+
 ROOT = Path(__file__).resolve().parent.parent
 MANIFEST = json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
 
 
 def test_plugin_version_matches_package():
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    assert MANIFEST["version"] == re.search(r'^version = "(.+)"$', pyproject, re.MULTILINE)[1]
+    version = re.search(r'^version = "(.+)"$', pyproject, re.MULTILINE)[1]
+    assert MANIFEST["version"] == version
+    assert exams_generator.__version__ == version
 
 
 def test_commands_and_skill_exist():

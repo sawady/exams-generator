@@ -18,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Claude Code plugin (`.claude-plugin/`): MCP server configured from the plugin's options,
   the `write-exam` and `review-exam` commands, and an `exam-writing` skill.
 
+### Changed
+
+- Packaging ready for PyPI: complete metadata, a source distribution with only what it
+  needs, a CI job that builds it and checks it with twine, and absolute links in the README.
+
 ## [0.1.0] - 2026-11-04
 
 First public release.

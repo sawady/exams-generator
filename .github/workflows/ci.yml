@@ -64,6 +64,27 @@ jobs:
         run: kpsewhich spanish.ldf
       - run: pytest -rs
 
+  package:
+    name: Package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install build twine
+      - run: python -m build
+      - run: twine check --strict dist/*
+      - name: The wheel installs and has its assets
+        run: |
+          python -m venv /tmp/wheel-check
+          /tmp/wheel-check/bin/pip install dist/*.whl
+          cd /tmp && /tmp/wheel-check/bin/python -c "
+          from exams_generator.content import Content
+          from pathlib import Path
+          assert Content(Path('/tmp/nothing')).style_guide('c', 'en')
+          "
+
   docker:
     name: Docker image
     runs-on: ubuntu-latest

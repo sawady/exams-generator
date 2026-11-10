@@ -76,10 +76,10 @@ rendered to a printable PDF.
    ```
 
    To get `/write-exam` and `/review-exam` as plain slash commands, copy
-   [`.claude/commands/`](.claude/commands) into `~/.claude/commands/` (or into your
+   [`.claude/commands/`](https://github.com/sawady/exams-generator/tree/main/.claude/commands) into `~/.claude/commands/` (or into your
    project's `.claude/commands/`).
 
-To look around first, copy the [example exams](examples/exams) (all invented) and
+To look around first, copy the [example exams](https://github.com/sawady/exams-generator/tree/main/examples/exams) (all invented) and
 point `EXAMS_DIR` at the copy:
 
 ```bash
@@ -179,7 +179,7 @@ The **course profile** is where course-specific rules go: header format, the all
 subset of each language (the compiler cannot enforce "no classes" or "no higher-order
 functions"), the exercise structure, and the auxiliary data types students may use. The
 model reads it first and it overrides the generic guides. See
-[`examples/course-profile.md`](examples/course-profile.md).
+[`examples/course-profile.md`](https://github.com/sawady/exams-generator/blob/main/examples/course-profile.md).
 
 ## Languages
 
@@ -336,4 +336,4 @@ exams-generator is free software. If it is useful to you, you can support its de
 
 ## License
 
-[MIT](LICENSE).
+[MIT](https://github.com/sawady/exams-generator/blob/main/LICENSE).
