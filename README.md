@@ -87,6 +87,26 @@ cp -r examples/exams /tmp/demo-exams
 EXAMS_DIR=/tmp/demo-exams exams-generator   # stdio; normally your MCP client starts it
 ```
 
+## Quickstart: Claude Code plugin
+
+The plugin installs the MCP server, the `/exams-generator:write-exam` and
+`/exams-generator:review-exam` commands, and an `exam-writing` skill. It needs
+[uv](https://docs.astral.sh/uv/) and the toolchains from step 1 above. Inside Claude Code:
+
+```text
+/plugin marketplace add sawady/exams-generator
+/plugin install exams-generator@exams-generator
+```
+
+It asks for your exams directory (use a clone of a private repository, as above), the default
+exam language and whether to allow demos to run (off by default; see
+[Running demos](#running-demos-optional)). Course profile and overrides go in `.exams-config`
+inside the exams directory. Without an exams directory the server does not start: run
+`/plugin configure exams-generator@exams-generator` to set it later.
+
+To try a local checkout: `claude --plugin-dir /path/to/exams-generator`. The server is built
+from the plugin's own copy of the source, so it always matches the plugin's version.
+
 ## Remote server (streamable HTTP)
 
 Run it on a server so a whole teaching team shares the same exams and toolchains.

@@ -1,0 +1,19 @@
+{
+  "name": "exams-generator",
+  "owner": {
+    "name": "Federico Sawady",
+    "url": "https://github.com/sawady"
+  },
+  "metadata": {
+    "description": "Claude Code plugin for writing compiler-checked programming exams"
+  },
+  "plugins": [
+    {
+      "name": "exams-generator",
+      "source": "./",
+      "description": "Write programming exams whose reference solution is checked by a real compiler and rendered to PDF",
+      "category": "education",
+      "homepage": "https://github.com/sawady/exams-generator"
+    }
+  ]
+}

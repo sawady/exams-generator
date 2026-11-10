@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   bubblewrap with no network and no access to the exams, under a timeout and resource
   limits. A missing sandbox or toolchain, or a solution with no demos, is reported as
   *skipped*, never as passed. The checkers still never execute anything.
+- Claude Code plugin (`.claude-plugin/`): MCP server configured from the plugin's options,
+  the `write-exam` and `review-exam` commands, and an `exam-writing` skill.
 
 ## [0.1.0] - 2026-11-04
 

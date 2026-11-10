@@ -1,0 +1,49 @@
+{
+  "name": "exams-generator",
+  "displayName": "Exams generator",
+  "version": "0.1.0",
+  "description": "Write programming exams whose reference solution is checked by a real compiler and rendered to PDF",
+  "author": {
+    "name": "Federico Sawady",
+    "url": "https://github.com/sawady"
+  },
+  "homepage": "https://github.com/sawady/exams-generator",
+  "repository": "https://github.com/sawady/exams-generator",
+  "license": "MIT",
+  "keywords": ["exams", "education", "teaching", "mcp", "haskell", "c", "cpp", "python"],
+  "commands": ["./.claude/commands/"],
+  "mcpServers": {
+    "exams": {
+      "command": "uvx",
+      "args": ["--from", "${CLAUDE_PLUGIN_ROOT}[typecheck]", "exams-generator"],
+      "env": {
+        "EXAMS_TRANSPORT": "stdio",
+        "EXAMS_DIR": "${user_config.exams_dir}",
+        "EXAMS_DATA_DIR": "${user_config.exams_dir}/.exams-config",
+        "EXAMS_LOCALE": "${user_config.locale}",
+        "EXAMS_RUN_DEMOS": "${user_config.run_demos}"
+      }
+    }
+  },
+  "userConfig": {
+    "exams_dir": {
+      "type": "directory",
+      "title": "Exams directory",
+      "description": "Where exams are stored and committed. Use a clone of a private git repository: exams contain their solutions. Course profile and overrides go in .exams-config inside it.",
+      "required": true
+    },
+    "locale": {
+      "type": "string",
+      "title": "Default exam language",
+      "description": "Language new exams are written in. An exam can still choose another.",
+      "options": ["en", "es"],
+      "default": "en"
+    },
+    "run_demos": {
+      "type": "boolean",
+      "title": "Allow executing demos (run_demos tool)",
+      "description": "Off by default. When on, the server can execute solutions inside a bubblewrap sandbox. Linux only; read the 'Running demos' section of the README first.",
+      "default": false
+    }
+  }
+}
