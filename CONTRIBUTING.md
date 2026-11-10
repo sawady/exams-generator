@@ -35,13 +35,38 @@ builds the Docker image.
 
 ## Publishing a release to PyPI (maintainers)
 
-Nothing here runs by itself: CI only builds the package and checks its metadata.
+Releases are published by [`.github/workflows/publish.yml`](.github/workflows/publish.yml)
+when a `v*` tag is pushed. It uses
+[Trusted Publishing](https://docs.pypi.org/trusted-publishers/) (OIDC), so there are no API
+tokens or secrets to manage.
 
-1. Move the `[Unreleased]` notes of `CHANGELOG.md` to a new version, and update the links at
-   the bottom. Set that version in `pyproject.toml`, `src/exams_generator/__init__.py` and
-   `.claude-plugin/plugin.json` (a test checks that they agree).
+### One-time setup on PyPI
+
+Before the first tag, register a *pending publisher* at
+<https://pypi.org/manage/account/publishing/>, with exactly these values:
+
+| Field | Value |
+|---|---|
+| PyPI Project Name | `exams-generator` |
+| Owner | `sawady` |
+| Repository name | `exams-generator` |
+| Workflow name | `publish.yml` |
+| Environment name | `pypi` |
+
+Without it, the publish job fails with an authentication error and nothing is uploaded. The
+first successful publish creates the project on PyPI and turns the pending publisher into a
+regular one. GitHub creates the `pypi` environment the first time the workflow uses it; to
+require an approval before each upload, add reviewers to it under
+*Settings > Environments*.
+
+### Cutting a release
+
+1. Move the `[Unreleased]` notes of `CHANGELOG.md` to a new version with today's date (or, if
+   they are already there, set the date), and update the links at the bottom. Set that version
+   in `pyproject.toml`, `src/exams_generator/__init__.py` and `.claude-plugin/plugin.json` (a
+   test checks that they agree).
 2. Commit, and wait for CI to be green.
-3. Build from a clean tree and check the result:
+3. Optionally, build from a clean tree and check the result:
 
    ```bash
    rm -rf dist && uv build
@@ -51,17 +76,16 @@ Nothing here runs by itself: CI only builds the package and checks its metadata.
      "from exams_generator.server import create_server; create_server()"
    ```
 
-4. Publish, with an API token for the `exams-generator` project (or with
-   [Trusted Publishing](https://docs.pypi.org/trusted-publishers/) from a workflow):
+4. Tag the commit and push the tag, which starts the publish workflow:
 
    ```bash
-   UV_PUBLISH_TOKEN=pypi-... uv publish dist/*
+   git tag vX.Y.Z && git push origin vX.Y.Z
    ```
 
-   Upload to TestPyPI first with `uv publish --publish-url https://test.pypi.org/legacy/`
-   if the release changes the packaging. A version number can never be reused on PyPI.
+   The workflow stops if the tag does not match the version in `pyproject.toml`. A version
+   number can never be reused on PyPI.
 
-5. Tag `vX.Y.Z` and create the GitHub release from the changelog.
+5. Create the GitHub release from the changelog.
 6. Change the install lines in the README to `uv tool install "exams-generator[typecheck]"`
    once the first release is on PyPI.
 

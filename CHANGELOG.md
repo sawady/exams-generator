@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - Pending
+
 ### Added
 
 - Optional `run_demos` tool that executes a solution's demos in a sandbox: doctests
@@ -26,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Packaging ready for PyPI: complete metadata, a source distribution with only what it
   needs, a CI job that builds it and checks it with twine, and absolute links in the README.
+- Releases are published to PyPI from a `v*` tag by a workflow that uses Trusted Publishing,
+  with no API tokens.
 
 ## [0.1.0] - 2026-11-04
 
@@ -64,5 +68,6 @@ First public release.
   header next to its private struct, are kept in the PDF (pandoc drops raw HTML when it
   writes LaTeX; a small Lua filter turns them into line breaks).
 
-[Unreleased]: https://github.com/sawady/exams-generator/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/sawady/exams-generator/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/sawady/exams-generator/releases/tag/v0.2.0
 [0.1.0]: https://github.com/sawady/exams-generator/releases/tag/v0.1.0

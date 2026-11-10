@@ -1,6 +1,6 @@
 [project]
 name = "exams-generator"
-version = "0.1.0"
+version = "0.2.0"
 description = "MCP server for writing programming exams whose solutions are checked by a real compiler and rendered to PDF"
 readme = "README.md"
 license = "MIT"

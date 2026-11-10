@@ -1,7 +1,7 @@
 {
   "name": "exams-generator",
   "displayName": "Exams generator",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Write programming exams whose reference solution is checked by a real compiler and rendered to PDF",
   "author": {
     "name": "Federico Sawady",
