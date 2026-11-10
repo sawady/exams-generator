@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   *skipped*, never as passed. The checkers still never execute anything.
 - Claude Code plugin (`.claude-plugin/`): MCP server configured from the plugin's options,
   the `write-exam` and `review-exam` commands, and an `exam-writing` skill.
+- Two more invented example exams, with solutions that pass their checkers: an irrigation
+  network in Haskell (algebraic types, recursion and folds, in English) and a priority queue
+  on a binary heap in C (invariants, implementation and client code, in Spanish). The README
+  now lists all the examples.
 
 ### Changed
 

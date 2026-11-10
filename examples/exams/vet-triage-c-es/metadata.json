@@ -1,0 +1,24 @@
+{
+  "name": "vet-triage-c-es",
+  "title": "Guardia veterinaria",
+  "description": "Cola de prioridad sobre una heap binaria en C: invariantes, implementación y código cliente.",
+  "tags": [
+    "example",
+    "adt",
+    "binary-heap",
+    "invariants"
+  ],
+  "locale": "es",
+  "languages": [
+    "c"
+  ],
+  "solution_files": [
+    "cliente.c",
+    "guardia.c",
+    "guardia.h"
+  ],
+  "created_at": 0.0,
+  "updated_at": 0.0,
+  "rendered": [],
+  "last_check": null
+}

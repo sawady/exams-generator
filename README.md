@@ -87,6 +87,15 @@ cp -r examples/exams /tmp/demo-exams
 EXAMS_DIR=/tmp/demo-exams exams-generator   # stdio; normally your MCP client starts it
 ```
 
+| Example | Language | Statement | Covers |
+|---|---|---|---|
+| [Irrigation network](https://github.com/sawady/exams-generator/tree/main/examples/exams/irrigation-network-haskell-en) | Haskell | English | algebraic types, recursion and folds |
+| [Toll roads](https://github.com/sawady/exams-generator/tree/main/examples/exams/toll-roads-haskell-es) | Haskell | Spanish | recursion, recursion schemes and induction |
+| [Vet triage](https://github.com/sawady/exams-generator/tree/main/examples/exams/vet-triage-c-es) | C | Spanish | priority queue on a binary heap: invariants, implementation and client code |
+| [Print queue](https://github.com/sawady/exams-generator/tree/main/examples/exams/print-queue-c-en) | C | English | circular buffer ADT: client code, invariants and implementation |
+| [Parking lot](https://github.com/sawady/exams-generator/tree/main/examples/exams/parking-lot-cpp-es) | C++ | Spanish | a class with its invariant and code reading |
+| [Gradebook](https://github.com/sawady/exams-generator/tree/main/examples/exams/gradebook-python-en) | Python | English | dictionaries and invariants |
+
 ## Quickstart: Claude Code plugin
 
 The plugin installs the MCP server, the `/exams-generator:write-exam` and

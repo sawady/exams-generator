@@ -1,0 +1,22 @@
+{
+  "name": "irrigation-network-haskell-en",
+  "title": "Irrigation network",
+  "description": "Recursion and folds over an algebraic type with a list of children.",
+  "tags": [
+    "example",
+    "algebraic-types",
+    "recursion",
+    "folds"
+  ],
+  "locale": "en",
+  "languages": [
+    "haskell"
+  ],
+  "solution_files": [
+    "Exam.hs"
+  ],
+  "created_at": 0.0,
+  "updated_at": 0.0,
+  "rendered": [],
+  "last_check": null
+}
