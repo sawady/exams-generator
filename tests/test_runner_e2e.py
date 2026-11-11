@@ -198,6 +198,29 @@ async def test_a_fork_bomb_stays_inside():
     assert out["ok"] is True, out["output"]
 
 
+@runner_up
+async def test_the_process_limit_holds():
+    probe = doctest_module(
+        ">>> import os, signal, time",
+        ">>> children = []",
+        ">>> for _ in range(400):",
+        "...     try:",
+        "...         pid = os.fork()",
+        "...     except OSError:",
+        "...         break",
+        "...     if pid == 0:",
+        "...         time.sleep(60)",
+        "...         os._exit(0)",
+        "...     children.append(pid)",
+        ">>> for pid in children:",
+        "...     os.kill(pid, signal.SIGKILL)",
+        ">>> 0 < len(children) < 300",
+        "True",
+    )
+    out = await run_demos(**{"forks.py": probe})
+    assert out["ok"] is True, out["output"]
+
+
 @runner_down
 async def test_a_stopped_runner_means_skipped():
     out = await run_demos(**{"solution.py": doctest_module(">>> 2 + 3", "5")})

@@ -4,3 +4,7 @@
 services:
   runner:
     runtime: runsc
+    environment:
+      # gVisor hides the host's pids cgroup from the container, but its RLIMIT_NPROC
+      # counts only the sandbox's own processes, so the runner limits them with it.
+      EXAMS_RUNNER_NPROC: "128"

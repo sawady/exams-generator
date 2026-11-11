@@ -15,7 +15,10 @@ process is killed. Runs are serialized, so one run never sees another.
 The number of processes is limited by the container's pids cgroup, not by
 ``RLIMIT_NPROC``: that one counts every process of the same UID on the host,
 other containers included, so it is not a limit of this container at all. The
-runner refuses to start without a pids limit.
+runner refuses to start without a pids limit. Under gVisor the container's
+cgroups are not visible inside, but there ``RLIMIT_NPROC`` counts only the
+sandbox's own processes: set ``EXAMS_RUNNER_NPROC`` (``compose.gvisor.yaml``
+does) and the runner uses it instead.
 
 Because that sweep kills every process of the container, the runner refuses to
 start unless it is alone in its PID namespace, which is also a sign that it
@@ -30,6 +33,8 @@ EXAMS_RUNNER_PORT      Port                                        ``8766``
 EXAMS_RUN_TIMEOUT      Seconds per language, build included        ``30``
 EXAMS_RUN_MEMORY_MB    Address-space limit of each process         ``4096``
 EXAMS_RUNNER_QUEUE     Seconds a request waits for a busy runner   ``120``
+EXAMS_RUNNER_NPROC     Limit processes with RLIMIT_NPROC instead   (none: the
+                       of the pids cgroup (only under gVisor)      pids cgroup)
 =====================  ==========================================  ===========
 """
 
@@ -192,11 +197,12 @@ def cgroup_limits(root: str = "/sys/fs/cgroup") -> dict[str, str]:
     return limits
 
 
-def pids_limit_problem(limits: Mapping[str, str]) -> str | None:
-    if limits.get("pids") == "max":
+def pids_limit_problem(limits: Mapping[str, str], nproc: int | None = None) -> str | None:
+    if limits.get("pids") == "max" and not nproc:
         return (
             "the container has no process limit (pids.max is max); set pids_limit, "
-            "as compose.yaml does, so that a fork bomb stays inside it"
+            "as compose.yaml does, so that a fork bomb stays inside it (under gVisor, "
+            "set EXAMS_RUNNER_NPROC, as compose.gvisor.yaml does)"
         )
     return None
 
@@ -223,7 +229,12 @@ def main() -> None:
 
     env = os.environ
     limits = cgroup_limits()
-    problems = (forbidden_env_problem(env), pid_namespace_problem(), pids_limit_problem(limits))
+    nproc = int(env.get("EXAMS_RUNNER_NPROC") or 0) or None
+    problems = (
+        forbidden_env_problem(env),
+        pid_namespace_problem(),
+        pids_limit_problem(limits, nproc),
+    )
     for problem in problems:
         if problem:
             raise SystemExit(f"exams-generator-runner: {problem}")
@@ -234,7 +245,7 @@ def main() -> None:
         tmp_root=TMP_ROOT,
         timeout=float(env.get("EXAMS_RUN_TIMEOUT") or 30),
         memory_mb=int(env.get("EXAMS_RUN_MEMORY_MB") or 4096),
-        max_processes=None,
+        max_processes=nproc,
         container_limits=limits,
         sweep=True,
     )
