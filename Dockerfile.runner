@@ -1,0 +1,38 @@
+# The demo runner for run_demos: the toolchains and nothing else. No pandoc or LaTeX,
+# no git or SSH, no CA certificates, no exams and no token. It runs as a non-root user
+# and expects the container settings of compose.yaml: no outbound network, read-only
+# root, tmpfs on /input, /work and /tmp, and limits on CPU, memory and processes.
+FROM debian:bookworm-slim
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3 python3-venv \
+        ghc \
+        gcc g++ libc6-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+COPY pyproject.toml README.md LICENSE ./
+COPY src ./src
+RUN python3 -m venv /venv \
+    && /venv/bin/pip install --upgrade pip \
+    && /venv/bin/pip install . \
+    && rm -rf /build
+
+# Mount points; compose.yaml puts a tmpfs on each. The user owns nothing else.
+RUN mkdir -m 1777 /input /work
+USER 10001:10001
+WORKDIR /work
+
+ENV PATH="/venv/bin:${PATH}" \
+    EXAMS_RUNNER_HOST=0.0.0.0 \
+    EXAMS_RUNNER_PORT=8766
+
+EXPOSE 8766
+HEALTHCHECK --interval=30s --timeout=5s \
+    CMD python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8766/healthz')"
+ENTRYPOINT ["exams-generator-runner"]

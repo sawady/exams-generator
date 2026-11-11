@@ -172,7 +172,11 @@ claude mcp add --transport http exams https://exams.example.org/mcp \
 
 To push every commit to your private repository from the container, set
 `EXAMS_GIT_PUSH=true` and mount an SSH deploy key with write access (see
-`docker-compose.yml`).
+`compose.yaml`).
+
+`run_demos` stays off in this setup. To turn it on, start the separate demo runner as well
+(`docker compose --profile demos up -d --build`); see
+[Running demos](#running-demos-optional).
 
 ## Keeping exams private
 
@@ -236,12 +240,23 @@ rust = "my_package.rust:RustChecker"   # a subclass of exams_generator.checkers.
 
 The checkers only compile. The optional `run_demos` tool goes further: it **executes**
 the solution's demos, which also catches a solution that compiles but gives the wrong
-answer. Because it runs code, it does not exist unless you turn it on:
+answer. Because it runs code, it does not exist unless you turn it on
+(`EXAMS_RUN_DEMOS=true`). It runs in one of two modes:
+
+- **Local** (the default): every run is a throwaway bubblewrap sandbox on the machine the
+  server runs on. For a teacher's own computer, with the server over stdio.
+- **Separate runner** (`EXAMS_RUN_RUNNER_URL`): the server sends the files of each run to
+  a runner in another container, which has the toolchains and nothing else. For Docker and
+  shared servers, where bubblewrap does not work without weakening the container.
 
 ```bash
+# Local mode
 sudo apt install bubblewrap         # 0.8 or newer also limits the size of its tmpfs
 export EXAMS_RUN_DEMOS=true
 export EXAMS_RUN_RO_BINDS="$HOME/.ghcup"   # only for toolchains outside /usr
+
+# Separate runner, with Docker: set EXAMS_RUN_DEMOS=true in .env, then
+docker compose --profile demos up -d --build
 ```
 
 | Language | What counts as a demo | How it passes |
@@ -253,10 +268,14 @@ export EXAMS_RUN_RO_BINDS="$HOME/.ghcup"   # only for toolchains outside /usr
 Solutions in C and C++ usually have no `main`; pass the demo as another file:
 `run_demos(name="my-exam", extra_files={"demo_main.c": "..."})`. Nothing is saved.
 
-Status is one of `passed`, `failed`, `timeout` or `skipped`. A missing sandbox, a missing
-toolchain, a language without a runner and a solution without demos are all *skipped*,
-and `ok` is true only if every language really passed. Python `>>>` lines in comments are
-not doctests and do not run; only docstrings count, so check the counts in the report.
+Status is one of `passed`, `failed`, `timeout` or `skipped`. A missing sandbox, a runner
+that is down or does not answer, a missing toolchain, a language without a runner and a
+solution without demos are all *skipped*, and `ok` is true only if every language really
+passed. Python `>>>` lines in comments are not doctests and do not run; only docstrings
+count, so check the counts in the report. `list_languages` shows the mode and its state
+under `demos`.
+
+### Local mode: bubblewrap
 
 **What the sandbox gives you.** Every run is a throwaway [bubblewrap](https://github.com/containers/bubblewrap)
 sandbox, for the build as well as the run (compilers can run code too: Template Haskell,
@@ -289,7 +308,59 @@ assistant wrote, not for hostile code from strangers:
 - binding a directory with `EXAMS_RUN_RO_BINDS` exposes it to the code. The server refuses
   binds that would expose the home directory or the exams, but check any other you add.
 
-On a shared HTTP server, anyone holding the Bearer token can run code through this tool.
+On a shared HTTP server, anyone holding the Bearer token can run code through this tool,
+on the server's machine. Use the separate runner there.
+
+### Separate runner
+
+With `EXAMS_RUN_RUNNER_URL` set, the server never executes a solution itself, and never
+falls back to bubblewrap: it posts the files of the run to the runner (a small JSON
+protocol, versioned, described in
+[`remote.py`](https://github.com/sawady/exams-generator/blob/main/src/exams_generator/remote.py))
+and gets one result per language back. If the runner is down, too slow
+(`EXAMS_RUN_RUNNER_TIMEOUT`), busy, or answers anything malformed, every language is
+*skipped*. The server computes `ok` itself, so a runner can make a run fail but never pass
+one it did not report.
+
+The runner is `exams-generator-runner`, built from `Dockerfile.runner` (Python, GHC,
+GCC/G++; no pandoc, git, credentials or exams). `compose.yaml` runs it like this:
+
+- its only network is `internal`: no route to the internet, and only the server can reach it;
+- no `.env`, no volume, no token. It refuses to start if `EXAMS_BEARER_TOKEN` is set;
+- read-only root file system, tmpfs for `/input`, `/work` (256 MiB) and `/tmp`, a non-root
+  user, no capabilities, `no-new-privileges`;
+- cgroup limits for the whole container: 2 CPUs, 2 GiB of memory without swap, 256
+  processes. It refuses to start without a process limit;
+- inside it, each run gets an empty environment, the same timeout and per-process limits as
+  in local mode, and empty directories. Runs go one at a time, and after each one every
+  process left in the container is killed and the directories are emptied, so one run never
+  sees another. Because of that sweep the runner only starts alone in its own container
+  (it checks), and a `docker exec` into it may be cut short.
+
+Optionally, run it under [gVisor](https://gvisor.dev): install `runsc`, register it with
+Docker (`sudo runsc install && sudo systemctl restart docker`), and add the override file:
+
+```bash
+docker compose -f compose.yaml -f compose.gvisor.yaml --profile demos up -d --build
+```
+
+Then the code's system calls go to gVisor's own kernel instead of the host's. CI runs the
+end-to-end tests with both runtimes.
+
+**What it does not give you:**
+
+- **The token still runs code.** Anyone holding the Bearer token can still ask for runs;
+  they just land in the runner instead of on the server. Give the token only to people you
+  would let run code there.
+- Without gVisor the runner still shares the host's kernel, with Docker's default seccomp
+  and AppArmor profiles in between. That is stronger than local mode (cgroup limits, a
+  fresh read-only system, no secrets in the container) but not a VM.
+- The code can reach the server over the internal network, like any client: it sees
+  `/healthz` and a `401` without the token. It cannot reach anything else.
+- Runs are queued, one at a time; a request waits for up to two minutes
+  (`EXAMS_RUNNER_QUEUE`) and is then *skipped*.
+- A run that kills the runner (it can, it is the same user) only costs a restart: Docker
+  brings it back and that run is *skipped*.
 
 ## Reference
 
@@ -345,6 +416,12 @@ On a shared HTTP server, anyone holding the Bearer token can run code through th
 | `EXAMS_RUN_MEMORY_MB` | `4096` | Address-space limit of a demo run |
 | `EXAMS_RUN_RO_BINDS` | (none) | Extra read-only directories in the sandbox, `:` separated |
 | `EXAMS_BWRAP` | `bwrap` | bubblewrap executable |
+| `EXAMS_RUN_RUNNER_URL` | (none) | Send runs to a separate runner (`http://runner:8766`) instead of bubblewrap |
+| `EXAMS_RUN_RUNNER_TIMEOUT` | `300` | Seconds to wait for the runner's answer |
+
+The runner (`exams-generator-runner`) reads `EXAMS_RUN_TIMEOUT` and `EXAMS_RUN_MEMORY_MB`
+too, plus `EXAMS_RUNNER_HOST` / `EXAMS_RUNNER_PORT` (`127.0.0.1` / `8766`; the image binds
+`0.0.0.0`) and `EXAMS_RUNNER_QUEUE` (`120`, seconds a request waits for a busy runner).
 
 A `.env` file in the working directory is read too.
 

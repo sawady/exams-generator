@@ -36,6 +36,7 @@ dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.10"]
 
 [project.scripts]
 exams-generator = "exams_generator.server:main"
+exams-generator-runner = "exams_generator.runner:main"
 
 # Third-party checkers register an entry point in their own package, e.g.
 #   [project.entry-points."exams_generator.checkers"]

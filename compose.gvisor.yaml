@@ -1,0 +1,6 @@
+# Run the demo runner under gVisor: its system calls go to gVisor's own kernel instead
+# of the host's. Needs runsc installed and registered with Docker (see README).
+#   docker compose -f compose.yaml -f compose.gvisor.yaml --profile demos up -d --build
+services:
+  runner:
+    runtime: runsc

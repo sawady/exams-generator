@@ -29,6 +29,9 @@ EXAMS_RUN_MEMORY_MB        Address-space limit of a demo run            ``4096``
 EXAMS_RUN_RO_BINDS         Extra read-only directories in the sandbox   (none)
                            (toolchains outside ``/usr``), ``:`` separated
 EXAMS_BWRAP                bubblewrap executable                        ``bwrap``
+EXAMS_RUN_RUNNER_URL       Send runs to a separate demo runner          (none: bubblewrap
+                           (``runner.py``) instead of bubblewrap here   here)
+EXAMS_RUN_RUNNER_TIMEOUT   Seconds to wait for the runner's answer      ``300``
 =========================  ===========================================  ==================
 
 Checker-specific variables (``EXAMS_GHC``, ``EXAMS_CC``, ``EXAMS_CFLAGS``,
@@ -81,6 +84,8 @@ class Settings:
     run_memory_mb: int = 4096
     run_ro_binds: tuple[Path, ...] = field(default_factory=tuple)
     bwrap: str = "bwrap"
+    run_runner_url: str = ""
+    run_runner_timeout: float = 300.0
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Settings:
@@ -112,4 +117,6 @@ class Settings:
             run_memory_mb=int(env.get("EXAMS_RUN_MEMORY_MB") or 4096),
             run_ro_binds=ro_binds,
             bwrap=env.get("EXAMS_BWRAP") or "bwrap",
+            run_runner_url=(env.get("EXAMS_RUN_RUNNER_URL") or "").strip(),
+            run_runner_timeout=float(env.get("EXAMS_RUN_RUNNER_TIMEOUT") or 300),
         )

@@ -25,6 +25,10 @@ from GHCup, run them with `EXAMS_RUN_RO_BINDS="$HOME/.ghcup"`, or the Haskell on
 CI runs the suite on several Python versions, once more with every toolchain, and builds
 the Docker image.
 
+`tests/test_runner_e2e.py` checks the separate demo runner through `compose.yaml` and skips
+unless you point it at a running stack; its docstring has the commands. CI runs it with
+runc and with gVisor.
+
 ## Style and rules
 
 - Code, comments and docs in English. The bundled style guides and templates exist in

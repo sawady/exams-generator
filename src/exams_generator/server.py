@@ -22,6 +22,7 @@ from .config import LOCALE_NAMES, SUPPORTED_LOCALES, Settings
 from .content import Content
 from .demos import DemoRunner
 from .pdf import render_pdf, solution_markdown, toolchain_status
+from .remote import RemoteDemoRunner
 from .sandbox import Sandbox
 from .storage import Storage, StorageError, check_summary, validate_filename, validate_name
 
@@ -39,7 +40,7 @@ into public places.
 RUN_DEMOS_INSTRUCTIONS = """\
 
 run_demos executes the solution's demos and doctests in a sandbox. Only status "passed"
-verified anything: "skipped" (no sandbox, no toolchain, no demos) is not a pass.
+verified anything: "skipped" (no sandbox or runner, no toolchain, no demos) is not a pass.
 """
 
 SOLUTION_HEADING = {"en": "Solution", "es": "Solución"}
@@ -56,13 +57,26 @@ def create_server(settings: Settings | None = None) -> MCPServer:
     content = Content(settings.data_dir, default_locale=settings.locale)
     registry = CheckerRegistry(timeout=settings.check_timeout)
 
-    sandbox = Sandbox(
-        bwrap=settings.bwrap,
-        timeout=settings.run_timeout,
-        memory_mb=settings.run_memory_mb,
-        ro_binds=settings.run_ro_binds,
-        protected=(settings.exams_dir, settings.data_dir),
-    )
+    # run_demos: a separate runner if one is configured, bubblewrap here otherwise.
+    # Never both: with a runner configured, this process never executes a solution.
+    runner: DemoRunner | RemoteDemoRunner
+    if settings.run_runner_url:
+        remote = RemoteDemoRunner(
+            registry, settings.run_runner_url, timeout=settings.run_runner_timeout
+        )
+        runner, demos_status = remote, remote.status
+    else:
+        sandbox = Sandbox(
+            bwrap=settings.bwrap,
+            timeout=settings.run_timeout,
+            memory_mb=settings.run_memory_mb,
+            ro_binds=settings.run_ro_binds,
+            protected=(settings.exams_dir, settings.data_dir),
+        )
+        runner = DemoRunner(registry, sandbox)
+
+        def demos_status() -> dict[str, Any]:
+            return {"mode": "local", **sandbox.status().as_dict()}
 
     mcp = MCPServer(
         "exams-generator",
@@ -109,9 +123,7 @@ def create_server(settings: Settings | None = None) -> MCPServer:
             "git": storage.git_status(),
             "course_profile": content.course_profile() is not None,
             "demos": (
-                {"enabled": True, **sandbox.status().as_dict()}
-                if settings.run_demos
-                else {"enabled": False}
+                {"enabled": True, **demos_status()} if settings.run_demos else {"enabled": False}
             ),
         }
 
@@ -251,12 +263,11 @@ def create_server(settings: Settings | None = None) -> MCPServer:
     # Opt-in: without EXAMS_RUN_DEMOS this tool does not exist. It is the only way
     # the server executes a solution; the checkers above never do.
     if settings.run_demos:
-        runner = DemoRunner(registry, sandbox)
 
         @mcp.tool()
         def run_demos(name: str = "", extra_files: dict[str, str] | None = None) -> dict[str, Any]:
-            """Execute a solution's demos and doctests in a sandbox (no network, no access
-            to the exams, killed at a timeout).
+            """Execute a solution's demos and doctests in a sandbox, here or in a separate
+            runner (no network, no access to the exams, killed at a timeout).
 
             - name: a saved exam, whose solution files are used. Optional.
             - extra_files: {filename: content} added on top of them, or run on their own
@@ -265,7 +276,8 @@ def create_server(settings: Settings | None = None) -> MCPServer:
             Python runs doctests from docstrings, Haskell runs `>>> expr` comment lines
             against the expected output below them, C/C++ build and run a main() (exit 0
             passes). "ok" is true only if every language has status "passed"; "skipped"
-            (no sandbox, no toolchain, no demos) has not verified anything. Nothing is saved.
+            (no sandbox or runner, no toolchain, no demos) has not verified anything. Nothing
+            is saved.
             """
             files: dict[str, str] = {}
             try:

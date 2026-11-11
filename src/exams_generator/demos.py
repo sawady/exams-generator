@@ -23,14 +23,16 @@ import os
 import re
 import shlex
 import shutil
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
+from typing import Any, Protocol
 
 from .checkers import Checker, CheckerRegistry
 from .checkers.c_family import _CFamilyChecker
-from .sandbox import Sandbox, SandboxRun
+from .sandbox import SandboxRun, SandboxStatus
 
 PASSED, FAILED, TIMEOUT, SKIPPED = "passed", "failed", "timeout", "skipped"
+STATUSES = (PASSED, FAILED, TIMEOUT, SKIPPED)
 
 MAX_REPORT_CHARS = 16_000
 DEMO_BINARY = ".exams-demo"
@@ -70,6 +72,61 @@ class DemoResult:
             "output": self.as_text(),
         }
 
+    def to_wire(self) -> dict[str, object]:
+        """The fields a remote runner sends back (see ``remote.py``)."""
+        return {
+            "language": self.language,
+            "status": self.status,
+            "files": self.files,
+            "passed": self.passed,
+            "failed": self.failed,
+            "note": self.note,
+            "output": self.output,
+        }
+
+    @classmethod
+    def from_wire(cls, data: object) -> DemoResult:
+        """Rebuild a result from a runner's answer; ``ValueError`` if it is malformed."""
+        if not isinstance(data, dict):
+            raise ValueError("a result is not an object")
+        language, status = data.get("language"), data.get("status")
+        if not isinstance(language, str) or status not in STATUSES:
+            raise ValueError(f"bad language or status: {language!r}, {status!r}")
+        counts = [data.get("passed", 0), data.get("failed", 0)]
+        if not all(isinstance(n, int) and not isinstance(n, bool) and n >= 0 for n in counts):
+            raise ValueError("passed and failed must be non-negative integers")
+        files = data.get("files", [])
+        texts = [data.get("note", ""), data.get("output", "")]
+        if not (isinstance(files, list) and all(isinstance(f, str) for f in files)):
+            raise ValueError("files must be a list of names")
+        if not all(isinstance(t, str) for t in texts):
+            raise ValueError("note and output must be strings")
+        note, output = (_cap(t) for t in texts)
+        return cls(language, status, files, counts[0], counts[1], note, output)
+
+
+class DemoSandbox(Protocol):
+    """What the runner needs from a sandbox: ``Sandbox`` or ``ProcessSandbox``."""
+
+    timeout: float
+    input_root: str
+    work_root: str
+
+    def status(self) -> SandboxStatus: ...
+
+    def search_path(self) -> str: ...
+
+    def visible(self, path: str) -> bool: ...
+
+    def run(
+        self,
+        files: Mapping[str, str],
+        run: str,
+        *,
+        build: str | None = None,
+        support: Mapping[str, str] | None = None,
+    ) -> SandboxRun: ...
+
 
 @dataclass
 class _Plan:
@@ -89,7 +146,9 @@ class _Plan:
 _MAIN_RE = re.compile(r"^\s*(?:int|void)\s+main\s*\(", re.MULTILINE)
 
 
-def _plan_c_family(checker: Checker, files: Mapping[str, str], exe: str) -> _Plan | str:
+def _plan_c_family(
+    checker: Checker, files: Mapping[str, str], exe: str, support_dir: str
+) -> _Plan | str:
     assert isinstance(checker, _CFamilyChecker)
     sources = sorted(f for f in files if checker.owns(f))
     if not any(_MAIN_RE.search(files[f]) for f in sources):
@@ -133,7 +192,9 @@ sys.exit(1 if failed else 0)
 """
 
 
-def _plan_python(checker: Checker, files: Mapping[str, str], exe: str) -> _Plan | str:
+def _plan_python(
+    checker: Checker, files: Mapping[str, str], exe: str, support_dir: str
+) -> _Plan | str:
     marker = f"exams-doctest-{os.urandom(8).hex()}"
     sources = sorted(f for f in files if f.endswith(".py"))
     if not sources:
@@ -149,7 +210,7 @@ def _plan_python(checker: Checker, files: Mapping[str, str], exe: str) -> _Plan 
         status = PASSED if failed == 0 else FAILED
         return status, attempted - failed, failed, ""
 
-    cmd = [exe, "-B", "/input/support/doctest_harness.py", marker, *sources]
+    cmd = [exe, "-B", f"{support_dir}/doctest_harness.py", marker, *sources]
     return _Plan(
         run=shlex.join(cmd),
         support={"doctest_harness.py": _DOCTEST_HARNESS},
@@ -203,7 +264,9 @@ def _lines(text: str) -> list[str]:
     return lines
 
 
-def _plan_haskell(checker: Checker, files: Mapping[str, str], exe: str) -> _Plan | str:
+def _plan_haskell(
+    checker: Checker, files: Mapping[str, str], exe: str, support_dir: str
+) -> _Plan | str:
     originals = sorted(f for f in files if checker.owns(f) and not f.endswith(".lhs"))
     per_file = {f: extract_haskell_demos(files[f]) for f in originals}
     if not any(per_file.values()):
@@ -247,7 +310,7 @@ def _plan_haskell(checker: Checker, files: Mapping[str, str], exe: str) -> _Plan
     argv = [exe, "--interactive", "-v0", "-ignore-dot-ghci", "-i."]
     argv += [*_ghc_flags(), *sorted(modules.values())]
     return _Plan(
-        run=f"{shlex.join(argv)} < /input/support/demos.ghci 2>&1",
+        run=f"{shlex.join(argv)} < {shlex.quote(support_dir + '/demos.ghci')} 2>&1",
         support={"demos.ghci": "\n".join(script) + "\n"},
         files=prepared,
         interpret=interpret,
@@ -259,7 +322,7 @@ def _ghc_flags() -> list[str]:
     return shlex.split(os.environ.get("EXAMS_GHC_FLAGS", ""))
 
 
-_PLANNERS: dict[str, Callable[[Checker, Mapping[str, str], str], _Plan | str]] = {
+_PLANNERS: dict[str, Callable[[Checker, Mapping[str, str], str, str], _Plan | str]] = {
     "python": _plan_python,
     "haskell": _plan_haskell,
     "c": _plan_c_family,
@@ -270,8 +333,32 @@ _PLANNERS: dict[str, Callable[[Checker, Mapping[str, str], str], _Plan | str]] =
 # ------------------------------------------------------------------ running
 
 
+def languages_or_error(
+    registry: CheckerRegistry, files: Mapping[str, str]
+) -> tuple[list[str], dict[str, Any] | None]:
+    """The languages to run, or the reply for a request with nothing to run."""
+    if not files:
+        return [], {"ok": False, "results": [], "output": "No files to run."}
+    languages = registry.languages_for(files)
+    if not languages:
+        known = ", ".join(registry.names)
+        message = f"No language owns these files ({', '.join(files)}). Known: {known}."
+        return [], {"ok": False, "results": [], "output": message}
+    return languages, None
+
+
+def summarize(results: Sequence[DemoResult], sandbox: Mapping[str, object]) -> dict[str, Any]:
+    return {
+        # Skipped is not passed: every language has to have really run.
+        "ok": bool(results) and all(r.ok for r in results),
+        "results": [r.as_dict() for r in results],
+        "output": "\n\n".join(r.as_text() for r in results),
+        "sandbox": dict(sandbox),
+    }
+
+
 class DemoRunner:
-    def __init__(self, registry: CheckerRegistry, sandbox: Sandbox) -> None:
+    def __init__(self, registry: CheckerRegistry, sandbox: DemoSandbox) -> None:
         self.registry = registry
         self.sandbox = sandbox
 
@@ -303,7 +390,7 @@ class DemoRunner:
         exe, why = self._executable(checker)
         if exe is None:
             return DemoResult(checker.name, SKIPPED, owned, note=why)
-        plan = planner(checker, files, exe)
+        plan = planner(checker, files, exe, f"{self.sandbox.input_root}/support")
         if isinstance(plan, str):
             return DemoResult(checker.name, SKIPPED, owned, note=plan)
         run = self.sandbox.run(
@@ -317,45 +404,47 @@ class DemoRunner:
     def _outcome(self, language: str, owned: list[str], plan: _Plan, run: SandboxRun) -> DemoResult:
         if run.timed_out:
             note = f"timed out after {self.sandbox.timeout:g}s and was killed"
-            return DemoResult(language, TIMEOUT, owned, note=note, output=_report(run, plan))
+            output = _report(run, plan, self.sandbox.work_root)
+            return DemoResult(language, TIMEOUT, owned, note=note, output=output)
         if not run.started:
             note = f"the sandbox could not start: {run.stderr or 'unknown error'}"
             return DemoResult(language, SKIPPED, owned, note=note)
         if not run.built:
             note = f"build failed ({_describe_exit(run.exit_code)})"
-            return DemoResult(
-                language, FAILED, owned, failed=1, note=note, output=_report(run, plan)
-            )
+            output = _report(run, plan, self.sandbox.work_root)
+            return DemoResult(language, FAILED, owned, failed=1, note=note, output=output)
         status, passed, failed, note = plan.interpret(run)
-        output = "" if status == SKIPPED else _report(run, plan)
+        output = "" if status == SKIPPED else _report(run, plan, self.sandbox.work_root)
         return DemoResult(language, status, owned, passed, failed, note, output)
 
-    def run_files(self, files: Mapping[str, str]) -> dict[str, object]:
-        if not files:
-            return {"ok": False, "results": [], "output": "No files to run."}
-        languages = self.registry.languages_for(files)
-        if not languages:
-            known = ", ".join(self.registry.names)
-            message = f"No language owns these files ({', '.join(files)}). Known: {known}."
-            return {"ok": False, "results": [], "output": message}
+    def results(
+        self, files: Mapping[str, str], languages: Sequence[str]
+    ) -> tuple[list[DemoResult], SandboxStatus]:
         status = self.sandbox.status()
         if status.available:
             results = [self.run_language(language, files) for language in languages]
         else:
             note = f"sandbox not available. {status.hint}".strip()
             results = [DemoResult(language, SKIPPED, note=note) for language in languages]
-        return {
-            # Skipped is not passed: every language has to have really run.
-            "ok": all(r.ok for r in results),
-            "results": [r.as_dict() for r in results],
-            "output": "\n\n".join(r.as_text() for r in results),
-            "sandbox": status.as_dict(),
-        }
+        return results, status
+
+    def run_files(self, files: Mapping[str, str]) -> dict[str, Any]:
+        languages, problem = languages_or_error(self.registry, files)
+        if problem is not None:
+            return problem
+        results, status = self.results(files, languages)
+        return summarize(results, status.as_dict())
 
 
-def _report(run: SandboxRun, plan: _Plan) -> str:
+def _cap(text: str) -> str:
+    if len(text) > MAX_REPORT_CHARS:
+        return text[:MAX_REPORT_CHARS] + "\n... (output truncated)"
+    return text
+
+
+def _report(run: SandboxRun, plan: _Plan, work_root: str) -> str:
     text = "\n".join(s.rstrip() for s in (run.build_log, run.stdout, run.stderr) if s.strip())
-    text = text.replace("/work/", "")
+    text = text.replace(work_root.rstrip("/") + "/", "")
     if plan.marker:
         text = re.sub(rf"^{plan.marker}.*\n?", "", text, flags=re.MULTILINE).rstrip()
     if len(text) > MAX_REPORT_CHARS:

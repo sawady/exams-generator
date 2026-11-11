@@ -17,6 +17,11 @@ and the caller enforces a wall-clock timeout by killing the whole tree.
 
 There is no unsandboxed fallback: if the sandbox cannot start, the caller is
 told so, and reports the run as skipped.
+
+:class:`ProcessSandbox` is the other backend, used only by the separate demo
+runner (``runner.py``). It runs the code as a plain child process with the same
+limits and an empty environment, and leaves the walls to the container it
+lives in: no network, a read-only root, tmpfs mounts and no credentials.
 """
 
 from __future__ import annotations
@@ -84,6 +89,10 @@ class SandboxRun:
 
 
 class Sandbox:
+    #: Where the run's input and working directory are, as the code sees them.
+    input_root = "/input"
+    work_root = WORK_DIR
+
     def __init__(
         self,
         *,
@@ -220,16 +229,8 @@ class Sandbox:
             argv += ["--ro-bind", bind, bind]
         argv += ["--proc", "/proc", "--dev", "/dev", *size, "--tmpfs", "/dev/shm"]
         argv += [*size, "--tmpfs", "/tmp", *size, "--tmpfs", WORK_DIR]
-        argv += ["--ro-bind", str(input_dir), "/input", "--chdir", WORK_DIR]
-        argv += [
-            "prlimit",
-            f"--as={self.memory_mb * 1024 * 1024}",
-            f"--nproc={MAX_PROCESSES}",
-            f"--fsize={MAX_FILE_BYTES}",
-            f"--nofile={MAX_OPEN_FILES}",
-            "--core=0",
-            "--",
-        ]
+        argv += ["--ro-bind", str(input_dir), self.input_root, "--chdir", WORK_DIR]
+        argv += ["prlimit", *_prlimit_flags(self.memory_mb)]
         return argv
 
     def run(
@@ -249,76 +250,274 @@ class Sandbox:
         exe = shutil.which(self.bwrap)
         if exe is None:
             return SandboxRun(started=False, built=False, exit_code=-1, stderr=INSTALL_HINT)
-        nonce = os.urandom(8).hex()
-        setup_mark, build_mark = f"{nonce}:setup", f"{nonce}:build"
         with tempfile.TemporaryDirectory(prefix="exams-sandbox-") as tmp:
             root = Path(tmp)
             input_dir = root / "input"
-            (input_dir / "files").mkdir(parents=True)
-            (input_dir / "support").mkdir()
-            for filename, content in files.items():
-                target = input_dir / "files" / filename
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_text(content, encoding="utf-8")
-            for filename, content in (support or {}).items():
-                (input_dir / "support" / filename).write_text(content, encoding="utf-8")
-            driver = input_dir / "support" / "driver.sh"
-            driver.write_text(
-                "\n".join(
-                    [
-                        "cp -R /input/files/. . || exit 125",
-                        f"echo {setup_mark} >&2",
-                        *([f"{build} 1>&2 || exit $?"] if build else []),
-                        f"echo {build_mark} >&2",
-                        f"exec {run}",
-                        "",
-                    ]
-                ),
-                encoding="utf-8",
-            )
-            argv = [*self._argv(exe, input_dir), "/bin/sh", "/input/support/driver.sh"]
-            out_path, err_path = root / "stdout", root / "stderr"
-            with open(out_path, "wb") as out, open(err_path, "wb") as err:
-                proc = subprocess.Popen(
-                    argv,
-                    stdin=subprocess.DEVNULL,
-                    stdout=out,
-                    stderr=err,
-                    start_new_session=True,
-                    env=_HOST_ENV,
-                )
-                timed_out = False
-                try:
-                    proc.wait(timeout=self.timeout)
-                except subprocess.TimeoutExpired:
-                    timed_out = True
-                    _kill_tree(proc)
-                    proc.wait()
-            stdout, out_cut = _read_capped(out_path)
-            stderr, err_cut = _read_capped(err_path)
+            marks = _write_input(input_dir, self.input_root, files, run, build, support)
+            argv = [*self._argv(exe, input_dir), "/bin/sh", f"{self.input_root}/support/driver.sh"]
+            outcome = _execute(argv, root, self.timeout, env=_HOST_ENV)
+        return _parse(outcome, marks)
 
-        setup_log, sep, rest = stderr.partition(setup_mark + "\n")
-        if not sep:
-            # Nothing of the caller's ran; report bwrap's own complaint.
-            return SandboxRun(
-                started=False,
-                built=False,
-                exit_code=proc.returncode,
-                timed_out=timed_out,
-                stderr=setup_log.strip(),
-            )
-        build_log, sep, after = rest.partition(build_mark + "\n")
-        built = bool(sep)
-        return SandboxRun(
-            started=True,
-            built=built,
-            exit_code=proc.returncode,
-            timed_out=timed_out,
-            truncated=out_cut or err_cut,
-            build_log=build_log if built else rest,
-            stdout=stdout,
-            stderr=after if built else "",
+
+class ProcessSandbox:
+    """Run code as a plain child process, inside the demo runner's container.
+
+    This adds no walls of its own: it is safe only where the container already
+    provides them (see ``runner.py``, which refuses to start anywhere else). Per
+    run it gives the code an empty environment, ``prlimit`` limits, a timeout
+    that kills its process group and fresh ``input``, ``work`` and ``tmp``
+    directories, emptied before and after. With ``sweep`` (the runner's own
+    PID namespace only) it also kills every process left behind, so nothing
+    started by one run survives into the next. Runs must not overlap.
+    """
+
+    tool = "process"
+
+    def __init__(
+        self,
+        *,
+        input_root: str,
+        work_root: str,
+        tmp_root: str,
+        timeout: float = 30.0,
+        memory_mb: int = 4096,
+        max_processes: int | None = MAX_PROCESSES,
+        container_limits: Mapping[str, str] | None = None,
+        sweep: bool = False,
+    ) -> None:
+        self.input_root = input_root
+        self.work_root = work_root
+        self.tmp_root = tmp_root
+        self.timeout = timeout
+        self.memory_mb = memory_mb
+        #: RLIMIT_NPROC counts every process of the user, so the user has to be one
+        #: that nothing else on the host uses. None leaves it to the container's pids limit.
+        self.max_processes = max_processes
+        self.container_limits = dict(container_limits or {})
+        self.sweep = sweep
+
+    def visible(self, path: str) -> bool:
+        return True
+
+    def search_path(self) -> str:
+        return SYSTEM_PATH
+
+    def _limits(self) -> dict[str, object]:
+        return {
+            "timeout_seconds": self.timeout,
+            "memory_mb": self.memory_mb,
+            "max_processes": self.max_processes or "the container's pids limit",
+            "max_file_mb": MAX_FILE_BYTES // (1024 * 1024),
+            "work_dir": "the container's tmpfs, with the container's limits",
+            "container": self.container_limits,
+        }
+
+    def status(self) -> SandboxStatus:
+        limits = self._limits()
+        prlimit = shutil.which("prlimit", path=SYSTEM_PATH)
+        if prlimit is None:
+            hint = "prlimit (util-linux) is missing"
+            return SandboxStatus(False, self.tool, hint=hint, limits=limits)
+        for root in (self.input_root, self.work_root, self.tmp_root):
+            if not (os.path.isdir(root) and os.access(root, os.W_OK | os.X_OK)):
+                hint = f"{root} is not a writable directory"
+                return SandboxStatus(False, self.tool, prlimit, hint=hint, limits=limits)
+        return SandboxStatus(True, self.tool, prlimit, limits=limits)
+
+    def _env(self) -> dict[str, str]:
+        return {
+            "PATH": SYSTEM_PATH,
+            "HOME": self.work_root,
+            "TMPDIR": self.tmp_root,
+            "LANG": "C.UTF-8",
+            "PYTHONDONTWRITEBYTECODE": "1",
+        }
+
+    def _clean(self) -> None:
+        if self.sweep:
+            _sweep_processes()
+        for root in (self.input_root, self.work_root, self.tmp_root):
+            _empty_dir(root)
+
+    def run(
+        self,
+        files: Mapping[str, str],
+        run: str,
+        *,
+        build: str | None = None,
+        support: Mapping[str, str] | None = None,
+    ) -> SandboxRun:
+        prlimit = shutil.which("prlimit", path=SYSTEM_PATH)
+        if prlimit is None:
+            return SandboxRun(started=False, built=False, exit_code=-1, stderr="prlimit missing")
+        self._clean()
+        try:
+            marks = _write_input(Path(self.input_root), self.input_root, files, run, build, support)
+            capture = Path(tempfile.mkdtemp(prefix="exams-capture-", dir=self.tmp_root))
+            argv = [
+                prlimit,
+                *_prlimit_flags(self.memory_mb, self.max_processes),
+                "/bin/sh",
+                f"{self.input_root}/support/driver.sh",
+            ]
+            outcome = _execute(argv, capture, self.timeout, env=self._env(), cwd=self.work_root)
+        finally:
+            self._clean()
+        return _parse(outcome, marks)
+
+
+# ------------------------------------------------------------------ helpers
+
+
+@dataclass
+class _Outcome:
+    exit_code: int
+    timed_out: bool
+    stdout: str
+    stderr: str
+    truncated: bool
+
+
+def _prlimit_flags(memory_mb: int, max_processes: int | None = MAX_PROCESSES) -> list[str]:
+    return [
+        f"--as={memory_mb * 1024 * 1024}",
+        *([f"--nproc={max_processes}"] if max_processes else []),
+        f"--fsize={MAX_FILE_BYTES}",
+        f"--nofile={MAX_OPEN_FILES}",
+        "--core=0",
+        "--",
+    ]
+
+
+def _write_input(
+    input_dir: Path,
+    input_root: str,
+    files: Mapping[str, str],
+    run: str,
+    build: str | None,
+    support: Mapping[str, str] | None,
+) -> tuple[str, str]:
+    """Write ``files``, ``support`` and the driver script; return the two markers.
+
+    ``input_dir`` is where to write, ``input_root`` where the code will see it.
+    Markers written by the driver tell apart a sandbox that never started and a
+    build that failed from a program that ran and failed.
+    """
+    nonce = os.urandom(8).hex()
+    setup_mark, build_mark = f"{nonce}:setup", f"{nonce}:build"
+    (input_dir / "files").mkdir(parents=True, exist_ok=True)
+    (input_dir / "support").mkdir(exist_ok=True)
+    for filename, content in files.items():
+        target = input_dir / "files" / filename
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+    for filename, content in (support or {}).items():
+        (input_dir / "support" / filename).write_text(content, encoding="utf-8")
+    (input_dir / "support" / "driver.sh").write_text(
+        "\n".join(
+            [
+                f"cp -R {input_root}/files/. . || exit 125",
+                f"echo {setup_mark} >&2",
+                *([f"{build} 1>&2 || exit $?"] if build else []),
+                f"echo {build_mark} >&2",
+                f"exec {run}",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    return setup_mark, build_mark
+
+
+def _execute(
+    argv: list[str],
+    capture_dir: Path,
+    timeout: float,
+    *,
+    env: Mapping[str, str],
+    cwd: str | None = None,
+) -> _Outcome:
+    """Run ``argv`` in a new session, kill the whole group at ``timeout``."""
+    out_path, err_path = capture_dir / "stdout", capture_dir / "stderr"
+    with open(out_path, "wb") as out, open(err_path, "wb") as err:
+        proc = subprocess.Popen(
+            argv,
+            stdin=subprocess.DEVNULL,
+            stdout=out,
+            stderr=err,
+            start_new_session=True,
+            env=dict(env),
+            cwd=cwd,
         )
+        timed_out = False
+        try:
+            proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            _kill_tree(proc)
+            proc.wait()
+    stdout, out_cut = _read_capped(out_path)
+    stderr, err_cut = _read_capped(err_path)
+    return _Outcome(proc.returncode, timed_out, stdout, stderr, out_cut or err_cut)
+
+
+def _parse(outcome: _Outcome, marks: tuple[str, str]) -> SandboxRun:
+    setup_mark, build_mark = marks
+    setup_log, sep, rest = outcome.stderr.partition(setup_mark + "\n")
+    if not sep:
+        # Nothing of the caller's ran; report the sandbox's own complaint.
+        return SandboxRun(
+            started=False,
+            built=False,
+            exit_code=outcome.exit_code,
+            timed_out=outcome.timed_out,
+            stderr=setup_log.strip(),
+        )
+    build_log, sep, after = rest.partition(build_mark + "\n")
+    built = bool(sep)
+    return SandboxRun(
+        started=True,
+        built=built,
+        exit_code=outcome.exit_code,
+        timed_out=outcome.timed_out,
+        truncated=outcome.truncated,
+        build_log=build_log if built else rest,
+        stdout=outcome.stdout,
+        stderr=after if built else "",
+    )
+
+
+def _sweep_processes() -> None:
+    """Kill every process this one may signal, except itself and PID 1, and reap them.
+
+    Only for a process alone in its PID namespace (a container): elsewhere this
+    would kill the user's whole session. ``runner.py`` checks that first.
+    """
+    try:
+        os.kill(-1, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        pass
+    # Orphans re-parented to us (when we are PID 1) become zombies; collect them.
+    while True:
+        try:
+            pid, _ = os.waitpid(-1, os.WNOHANG)
+        except ChildProcessError:
+            break
+        if pid == 0:
+            break
+
+
+def _empty_dir(root: str) -> None:
+    if not os.path.isdir(root):
+        return
+    for entry in os.scandir(root):
+        if entry.is_dir(follow_symlinks=False):
+            shutil.rmtree(entry.path, ignore_errors=True)
+        else:
+            try:
+                os.unlink(entry.path)
+            except OSError:
+                pass
 
 
 def _within(path: str, root: str) -> bool:

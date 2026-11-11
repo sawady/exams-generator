@@ -9,11 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `run_demos` can send runs to a separate runner instead of starting bubblewrap on the
+  server: set `EXAMS_RUN_RUNNER_URL`. The runner (`exams-generator-runner`, built from
+  `Dockerfile.runner`) has the toolchains and nothing else: no token, no exams, no
+  network but an internal one to the server, a read-only root, tmpfs work directories and
+  limits on CPU, memory and processes. A runner that is down, slow or answers anything
+  malformed makes the run *skipped*, never passed. Without the variable nothing changes.
+- `compose.yaml` runs the runner under the `demos` profile, and `compose.gvisor.yaml`
+  runs it under gVisor (`runsc`).
+- End-to-end tests of the server and the runner through compose, in CI with runc and with
+  gVisor: the run cannot see the server's variables or files, nor the network, and nothing
+  survives from one run to the next.
 - Listing details for Anthropic's plugin directory: an icon (`.claude-plugin/icon.png`, drawn for
   this project), documentation, support and privacy policy links in `plugin.json`, and
   `PRIVACY.md`.
 - README: where the plugin works (Claude Code only, because the server is a local process),
   example requests, and what the plugin runs and sends.
+
+### Changed
+
+- `docker-compose.yml` is now `compose.yaml`. `docker compose up` still starts only the
+  server.
 
 ## [0.2.0] - Pending
 
