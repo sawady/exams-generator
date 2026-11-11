@@ -5,6 +5,7 @@ services:
   runner:
     runtime: runsc
     environment:
-      # gVisor hides the host's pids cgroup from the container, but its RLIMIT_NPROC
-      # counts only the sandbox's own processes, so the runner limits them with it.
-      EXAMS_RUNNER_NPROC: "128"
+      # gVisor applies pids_limit outside the sandbox, where the runner cannot see it.
+      # A run that reaches it takes the sandbox down: Docker restarts the runner and
+      # the server reports that run as skipped.
+      EXAMS_RUNNER_PIDS_LIMIT_OUTSIDE: "true"

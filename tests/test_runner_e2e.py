@@ -12,7 +12,9 @@ and runs it again with EXAMS_E2E_RUNNER=down. To run it locally:
 from __future__ import annotations
 
 import os
+import time
 
+import anyio
 import pytest
 from mcp import Client
 from mcp.client.streamable_http import create_mcp_http_client, streamable_http_client
@@ -20,6 +22,8 @@ from mcp.client.streamable_http import create_mcp_http_client, streamable_http_c
 URL = os.environ.get("EXAMS_E2E_URL", "")
 TOKEN = os.environ.get("EXAMS_E2E_TOKEN", "")
 RUNNER = os.environ.get("EXAMS_E2E_RUNNER", "up")
+#: Under gVisor, reaching the process limit takes the runner's sandbox down (it restarts).
+GVISOR = os.environ.get("EXAMS_E2E_GVISOR", "") == "1"
 
 pytestmark = [
     pytest.mark.anyio,
@@ -37,6 +41,19 @@ EXAM_MARKER = "e2e-exam-marker-" + "4f1c9a"
 def client() -> Client:
     http = create_mcp_http_client(headers={"Authorization": f"Bearer {TOKEN}"})
     return Client(streamable_http_client(URL, http_client=http))
+
+
+async def runner_available() -> bool:
+    async with client() as c:
+        info = (await c.call_tool("list_languages", {})).structured_content
+    return bool(info["demos"].get("available"))
+
+
+async def wait_for_runner(seconds: float = 180) -> None:
+    deadline = time.monotonic() + seconds
+    while not await runner_available():
+        assert time.monotonic() < deadline, "the runner did not come back"
+        await anyio.sleep(3)
 
 
 async def run_demos(**files: str) -> dict:
@@ -192,13 +209,18 @@ async def test_a_fork_bomb_stays_inside():
     )
     out = await run_demos(**{"bomb.py": bomb})
     assert out["ok"] is False
-    assert out["results"][0]["status"] in {"timeout", "failed"}, out["output"]
-    # The runner is still there, and clean, for the next run.
+    # With runc the run times out and the runner carries on. Under gVisor the bomb takes
+    # the sandbox down, Docker restarts it, and the server reports the run as skipped.
+    expected = {"timeout", "failed", "skipped"} if GVISOR else {"timeout", "failed"}
+    assert out["results"][0]["status"] in expected, out["output"]
+    await wait_for_runner()
+    # The runner is there, and clean, for the next run.
     out = await run_demos(**{"solution.py": doctest_module(">>> 2 + 3", "5")})
     assert out["ok"] is True, out["output"]
 
 
 @runner_up
+@pytest.mark.skipif(GVISOR, reason="gVisor: the limit is outside; the fork bomb test covers it")
 async def test_the_process_limit_holds():
     probe = doctest_module(
         ">>> import os, signal, time",

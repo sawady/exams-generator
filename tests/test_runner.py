@@ -408,6 +408,6 @@ def test_runner_refuses_a_container_without_a_pids_limit(tmp_path):
     limits = cgroup_limits(str(tmp_path))
     assert limits == {"pids": "max", "memory": "2147483648"}
     assert "pids_limit" in (pids_limit_problem(limits) or "")
-    assert pids_limit_problem(limits, nproc=128) is None  # gVisor: RLIMIT_NPROC instead
+    assert pids_limit_problem(limits, outside=True) is None  # gVisor: applied outside
     (tmp_path / "pids.max").write_text("256\n")
     assert pids_limit_problem(cgroup_limits(str(tmp_path))) is None

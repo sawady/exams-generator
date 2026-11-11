@@ -15,10 +15,12 @@ process is killed. Runs are serialized, so one run never sees another.
 The number of processes is limited by the container's pids cgroup, not by
 ``RLIMIT_NPROC``: that one counts every process of the same UID on the host,
 other containers included, so it is not a limit of this container at all. The
-runner refuses to start without a pids limit. Under gVisor the container's
-cgroups are not visible inside, but there ``RLIMIT_NPROC`` counts only the
-sandbox's own processes: set ``EXAMS_RUNNER_NPROC`` (``compose.gvisor.yaml``
-does) and the runner uses it instead.
+runner refuses to start without a pids limit it can see. Under gVisor the
+container's cgroups are applied outside the sandbox and are not visible inside
+(and gVisor does not enforce ``RLIMIT_NPROC``), so ``compose.gvisor.yaml`` sets
+``EXAMS_RUNNER_PIDS_LIMIT_OUTSIDE=true`` to vouch for it. There, a run that
+reaches the limit takes the whole sandbox down; Docker restarts the runner and
+the server reports that run as skipped.
 
 Because that sweep kills every process of the container, the runner refuses to
 start unless it is alone in its PID namespace, which is also a sign that it
@@ -33,8 +35,8 @@ EXAMS_RUNNER_PORT      Port                                        ``8766``
 EXAMS_RUN_TIMEOUT      Seconds per language, build included        ``30``
 EXAMS_RUN_MEMORY_MB    Address-space limit of each process         ``4096``
 EXAMS_RUNNER_QUEUE     Seconds a request waits for a busy runner   ``120``
-EXAMS_RUNNER_NPROC     Limit processes with RLIMIT_NPROC instead   (none: the
-                       of the pids cgroup (only under gVisor)      pids cgroup)
+EXAMS_RUNNER_PIDS_     ``true``: the pids limit is applied where   ``false``
+LIMIT_OUTSIDE          the runner cannot see it (gVisor)
 =====================  ==========================================  ===========
 """
 
@@ -197,12 +199,13 @@ def cgroup_limits(root: str = "/sys/fs/cgroup") -> dict[str, str]:
     return limits
 
 
-def pids_limit_problem(limits: Mapping[str, str], nproc: int | None = None) -> str | None:
-    if limits.get("pids") == "max" and not nproc:
+def pids_limit_problem(limits: Mapping[str, str], outside: bool = False) -> str | None:
+    if limits.get("pids") == "max" and not outside:
         return (
             "the container has no process limit (pids.max is max); set pids_limit, "
             "as compose.yaml does, so that a fork bomb stays inside it (under gVisor, "
-            "set EXAMS_RUNNER_NPROC, as compose.gvisor.yaml does)"
+            "where it is not visible, also set EXAMS_RUNNER_PIDS_LIMIT_OUTSIDE=true, "
+            "as compose.gvisor.yaml does)"
         )
     return None
 
@@ -229,11 +232,11 @@ def main() -> None:
 
     env = os.environ
     limits = cgroup_limits()
-    nproc = int(env.get("EXAMS_RUNNER_NPROC") or 0) or None
+    outside = (env.get("EXAMS_RUNNER_PIDS_LIMIT_OUTSIDE") or "").strip().lower() == "true"
     problems = (
         forbidden_env_problem(env),
         pid_namespace_problem(),
-        pids_limit_problem(limits, nproc),
+        pids_limit_problem(limits, outside),
     )
     for problem in problems:
         if problem:
@@ -245,7 +248,7 @@ def main() -> None:
         tmp_root=TMP_ROOT,
         timeout=float(env.get("EXAMS_RUN_TIMEOUT") or 30),
         memory_mb=int(env.get("EXAMS_RUN_MEMORY_MB") or 4096),
-        max_processes=nproc,
+        max_processes=None,
         container_limits=limits,
         sweep=True,
     )

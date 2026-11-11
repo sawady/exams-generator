@@ -344,11 +344,13 @@ Docker (`sudo runsc install && sudo systemctl restart docker`), and add the over
 docker compose -f compose.yaml -f compose.gvisor.yaml --profile demos up -d --build
 ```
 
-Then the code's system calls go to gVisor's own kernel instead of the host's. gVisor hides
-the container's pids cgroup from the inside, so the override also sets
-`EXAMS_RUNNER_NPROC=128`: under gVisor, `RLIMIT_NPROC` counts only the sandbox's own
-processes, and the runner limits them with it. CI runs the end-to-end tests with both
-runtimes.
+Then the code's system calls go to gVisor's own kernel instead of the host's. CI runs the
+end-to-end tests with both runtimes. One difference: gVisor applies `pids_limit` outside
+the sandbox, where the runner cannot check it (the override sets
+`EXAMS_RUNNER_PIDS_LIMIT_OUTSIDE=true` to vouch for it), and a run that reaches it, a fork
+bomb for one, takes the whole sandbox down. Docker restarts the runner, and the server
+reports that run as *skipped* once `EXAMS_RUN_RUNNER_TIMEOUT` expires. With runc the run
+just fails or times out and the runner carries on.
 
 **What it does not give you:**
 
@@ -424,8 +426,8 @@ runtimes.
 
 The runner (`exams-generator-runner`) reads `EXAMS_RUN_TIMEOUT` and `EXAMS_RUN_MEMORY_MB`
 too, plus `EXAMS_RUNNER_HOST` / `EXAMS_RUNNER_PORT` (`127.0.0.1` / `8766`; the image binds
-`0.0.0.0`) `EXAMS_RUNNER_QUEUE` (`120`, seconds a request waits for a busy runner) and
-`EXAMS_RUNNER_NPROC` (gVisor only, see above).
+`0.0.0.0`), `EXAMS_RUNNER_QUEUE` (`120`, seconds a request waits for a busy runner) and
+`EXAMS_RUNNER_PIDS_LIMIT_OUTSIDE` (gVisor only, see above).
 
 A `.env` file in the working directory is read too.
 
