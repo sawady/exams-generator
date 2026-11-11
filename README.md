@@ -116,6 +116,27 @@ inside the exams directory. Without an exams directory the server does not start
 To try a local checkout: `claude --plugin-dir /path/to/exams-generator`. The server is built
 from the plugin's own copy of the source, so it always matches the plugin's version.
 
+The MCP server is a local process, so it runs in Claude Code only. On claude.ai and in Cowork
+the commands and the skill load, but without the server there is nothing to check or render.
+
+Things to ask once it is installed:
+
+- `/exams-generator:write-exam binary search trees lang=haskell locale=en kind=midterm n=3`:
+  a midterm whose reference solution GHC has checked, saved in your exams directory and
+  rendered to PDF.
+- "Check the solution of `my-exam` again and render the answer key": runs `check_exam`, then
+  `render_exam` with the solution, and tells you where `solution.pdf` is.
+- `/exams-generator:review-exam my-exam`: checks the solution again and reviews a saved exam
+  against your course profile and the style guide, item by item, proposing a fix for each
+  problem without changing the exam.
+
+**What the plugin runs and sends.** To start the server, `uvx` builds it from the plugin's copy
+and downloads its Python dependencies from PyPI into uv's cache. Everything else runs locally:
+the compilers, the type checkers, pandoc and LaTeX. Exams are written only to your exams directory
+and committed there; they are pushed to your git remote only if you set `EXAMS_GIT_PUSH=true`
+(the plugin leaves it off). Tool results, exam text included, go back to Claude Code as part of
+your conversation. There is no telemetry. Details in [PRIVACY.md](PRIVACY.md).
+
 ## Remote server (streamable HTTP)
 
 Run it on a server so a whole teaching team shares the same exams and toolchains.
@@ -342,6 +363,11 @@ builds and smoke-tests the Docker image.
 
 exams-generator is free software. If it is useful to you, you can support its development through
 [GitHub Sponsors](https://github.com/sponsors/sawady).
+
+## Privacy
+
+No telemetry, no service run by the author: see [PRIVACY.md](PRIVACY.md) for what is stored
+and sent.
 
 ## License
 

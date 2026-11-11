@@ -2,6 +2,7 @@
 
 import json
 import re
+import struct
 from pathlib import Path
 
 import exams_generator
@@ -31,3 +32,21 @@ def test_every_user_config_reference_is_declared():
 
 def test_demos_are_off_by_default_in_the_plugin():
     assert MANIFEST["userConfig"]["run_demos"]["default"] is False
+
+
+def test_directory_icon_is_a_square_png_the_directory_accepts():
+    # The directory wants a square PNG or JPEG, 512 to 2048 px a side, under 2 MB.
+    icon = ROOT / MANIFEST["icon"]
+    data = icon.read_bytes()
+    assert data[:8] == b"\x89PNG\r\n\x1a\n"
+    assert data[12:16] == b"IHDR"
+    width, height = struct.unpack(">II", data[16:24])
+    assert width == height
+    assert 512 <= width <= 2048
+    assert len(data) < 2 * 1024 * 1024
+
+
+def test_directory_listing_links_are_https():
+    for field in ("homepage", "documentationUrl", "supportUrl", "privacyPolicyUrl"):
+        assert MANIFEST[field].startswith("https://"), field
+    assert (ROOT / "PRIVACY.md").is_file()

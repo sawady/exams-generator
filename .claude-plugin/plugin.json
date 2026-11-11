@@ -11,6 +11,10 @@
   "repository": "https://github.com/sawady/exams-generator",
   "license": "MIT",
   "keywords": ["exams", "education", "teaching", "mcp", "haskell", "c", "cpp", "python"],
+  "icon": "./.claude-plugin/icon.png",
+  "documentationUrl": "https://github.com/sawady/exams-generator#readme",
+  "supportUrl": "https://github.com/sawady/exams-generator/issues",
+  "privacyPolicyUrl": "https://github.com/sawady/exams-generator/blob/main/PRIVACY.md",
   "commands": ["./.claude/commands/"],
   "mcpServers": {
     "exams": {

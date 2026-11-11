@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Listing details for Anthropic's plugin directory: an icon (`.claude-plugin/icon.png`, drawn for
+  this project), documentation, support and privacy policy links in `plugin.json`, and
+  `PRIVACY.md`.
+- README: where the plugin works (Claude Code only, because the server is a local process),
+  example requests, and what the plugin runs and sends.
+
 ## [0.2.0] - Pending
 
 ### Added
