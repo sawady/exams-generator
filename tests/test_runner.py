@@ -239,6 +239,10 @@ async def test_server_with_runner_down_reports_skipped(tmp_path):
         assert info["demos"]["available"] is False
 
 
+def test_default_timeout_is_a_minute():
+    assert RemoteDemoRunner(REGISTRY, "http://runner:8766").timeout == 60
+
+
 def test_invalid_runner_url_is_refused(tmp_path):
     settings = Settings(data_dir=tmp_path, exams_dir=tmp_path / "e", run_runner_url="runner:8766")
     with pytest.raises(ValueError, match="http"):

@@ -362,8 +362,10 @@ just fails or times out and the runner carries on.
   fresh read-only system, no secrets in the container) but not a VM.
 - The code can reach the server over the internal network, like any client: it sees
   `/healthz` and a `401` without the token. It cannot reach anything else.
-- Runs are queued, one at a time; a request waits for up to two minutes
-  (`EXAMS_RUNNER_QUEUE`) and is then *skipped*.
+- Runs are queued, one at a time. The server waits `EXAMS_RUN_RUNNER_TIMEOUT` (60 s) for
+  the answer, queue included, and then reports *skipped*: a run of several languages
+  (up to 30 s each, `EXAMS_RUN_TIMEOUT`) behind another one can reach that. On a busy
+  server raise it; it is also how long a run waits if the runner dies in the middle.
 - A run that kills the runner (it can, it is the same user) only costs a restart: Docker
   brings it back and that run is *skipped*.
 
@@ -422,7 +424,7 @@ just fails or times out and the runner carries on.
 | `EXAMS_RUN_RO_BINDS` | (none) | Extra read-only directories in the sandbox, `:` separated |
 | `EXAMS_BWRAP` | `bwrap` | bubblewrap executable |
 | `EXAMS_RUN_RUNNER_URL` | (none) | Send runs to a separate runner (`http://runner:8766`) instead of bubblewrap |
-| `EXAMS_RUN_RUNNER_TIMEOUT` | `300` | Seconds to wait for the runner's answer |
+| `EXAMS_RUN_RUNNER_TIMEOUT` | `60` | Seconds to wait for the runner's answer, queue included |
 
 The runner (`exams-generator-runner`) reads `EXAMS_RUN_TIMEOUT` and `EXAMS_RUN_MEMORY_MB`
 too, plus `EXAMS_RUNNER_HOST` / `EXAMS_RUNNER_PORT` (`127.0.0.1` / `8766`; the image binds

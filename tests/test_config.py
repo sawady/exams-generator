@@ -57,3 +57,13 @@ def test_run_demos_is_opt_in(tmp_path):
     assert s.run_memory_mb == 512
     assert s.run_ro_binds == (tmp_path / "a", tmp_path / "b")
     assert s.bwrap == "/opt/bwrap"
+
+
+def test_runner_settings():
+    s = Settings.from_env({})
+    assert s.run_runner_url == "" and s.run_runner_timeout == 60
+    s = Settings.from_env(
+        {"EXAMS_RUN_RUNNER_URL": " http://runner:8766 ", "EXAMS_RUN_RUNNER_TIMEOUT": "120"}
+    )
+    assert s.run_runner_url == "http://runner:8766" and s.run_runner_timeout == 120
+    assert Settings().run_runner_timeout == 60

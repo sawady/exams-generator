@@ -137,8 +137,7 @@ jobs:
           token="ci-$(openssl rand -hex 16)"
           echo "::add-mask::$token"
           echo "EXAMS_E2E_TOKEN=$token" >> "$GITHUB_ENV"
-          # A runner that dies mid-run leaves the request hanging until this timeout.
-          printf 'EXAMS_BEARER_TOKEN=%s\nEXAMS_RUN_DEMOS=true\nEXAMS_GIT_BACKUP=false\nEXAMS_RUN_RUNNER_TIMEOUT=90\n' "$token" > .env
+          printf 'EXAMS_BEARER_TOKEN=%s\nEXAMS_RUN_DEMOS=true\nEXAMS_GIT_BACKUP=false\n' "$token" > .env
           # The server runs as UID 1000 and writes the exams here.
           mkdir -p exams data && chmod 777 exams
           docker compose --profile demos up -d --build --wait

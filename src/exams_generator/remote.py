@@ -35,6 +35,9 @@ PROTOCOL = 1
 #: Larger answers are refused: results are capped well below this on the runner.
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 STATUS_TIMEOUT = 10.0
+#: Seconds to wait for a run's answer (EXAMS_RUN_RUNNER_TIMEOUT). Also what a run waits
+#: when the runner dies mid-run and the connection hangs.
+DEFAULT_TIMEOUT = 60.0
 
 
 class RunnerError(Exception):
@@ -51,7 +54,9 @@ _opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedire
 
 
 class RemoteDemoRunner:
-    def __init__(self, registry: CheckerRegistry, url: str, *, timeout: float = 300.0) -> None:
+    def __init__(
+        self, registry: CheckerRegistry, url: str, *, timeout: float = DEFAULT_TIMEOUT
+    ) -> None:
         if not url.startswith(("http://", "https://")):
             raise ValueError(f"EXAMS_RUN_RUNNER_URL must be an http(s) URL, not {url!r}")
         self.registry = registry

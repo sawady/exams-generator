@@ -14,7 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Dockerfile.runner`) has the toolchains and nothing else: no token, no exams, no
   network but an internal one to the server, a read-only root, tmpfs work directories and
   limits on CPU, memory and processes. A runner that is down, slow or answers anything
-  malformed makes the run *skipped*, never passed. Without the variable nothing changes.
+  malformed makes the run *skipped*, never passed; the server waits up to
+  `EXAMS_RUN_RUNNER_TIMEOUT` (60 s) for an answer. Without the variable nothing changes.
 - `compose.yaml` runs the runner under the `demos` profile, and `compose.gvisor.yaml`
   runs it under gVisor (`runsc`).
 - End-to-end tests of the server and the runner through compose, in CI with runc and with
